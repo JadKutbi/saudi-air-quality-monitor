@@ -17,7 +17,7 @@ import json
 # Import local modules
 from satellite_fetcher import SatelliteDataFetcher
 from analyzer import PollutionAnalyzer
-from visualizer import PollutionVisualizer
+from visualizer import MapVisualizer
 import config
 
 # Page configuration
@@ -92,7 +92,7 @@ def initialize_services():
             vertex_project=vertex_project,
             vertex_location=vertex_location
         )
-        visualizer = PollutionVisualizer()
+        visualizer = MapVisualizer()
 
         return fetcher, analyzer, visualizer
     except Exception as e:

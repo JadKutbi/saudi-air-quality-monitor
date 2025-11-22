@@ -4,6 +4,8 @@ numpy
 plotly
 earthengine-api
 folium
+streamlit-folium
+branca
 Pillow
 google-generativeai
 python-dotenv
