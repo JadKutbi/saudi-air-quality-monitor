@@ -1,0 +1,38 @@
+[theme]
+# Primary color - Professional blue
+primaryColor = "#1e3a8a"
+
+# Background color - Light gray
+backgroundColor = "#f5f5f5"
+
+# Secondary background color - White
+secondaryBackgroundColor = "#ffffff"
+
+# Text color - Dark gray
+textColor = "#262730"
+
+# Font
+font = "sans serif"
+
+[server]
+# Port configuration
+port = 8501
+
+# Enable CORS
+enableCORS = false
+
+# Enable XsrfProtection
+enableXsrfProtection = true
+
+# Max upload size (MB)
+maxUploadSize = 200
+
+# Headless mode (for deployment)
+headless = true
+
+[browser]
+# Tab title
+gatherUsageStats = false
+
+# Server address (for deployment)
+serverAddress = "0.0.0.0"

@@ -1,0 +1,11 @@
+streamlit
+pandas
+numpy
+plotly
+earthengine-api
+folium
+Pillow
+google-generativeai
+python-dotenv
+pytz
+requests
