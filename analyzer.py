@@ -440,7 +440,13 @@ Before attributing to any factory, verify:
 - Are ANY factories showing confidence >40%?
 - If NO factories are upwind AND all confidence scores are <40%, you MUST report: **"NO CLEAR SOURCE IDENTIFIED - No factories aligned with wind direction"**
 
-**If a clear source exists (upwind factory with >40% confidence):**
+**CLUSTER POLLUTION CHECK:**
+Count how many factories are marked "✓ UPWIND":
+- If 3 OR MORE factories are upwind within 10 km, this suggests **CLUSTER POLLUTION** (cumulative emissions from industrial zone)
+- In this case, recommend **COORDINATED CLUSTER INVESTIGATION** of the entire industrial area, not just one facility
+- Report the top 3 contributors and note this is likely combined emissions
+
+**If a clear single source exists (1-2 upwind factories with >40% confidence):**
 
 1. **Primary Source Identification:**
    - Name the most likely factory
@@ -457,7 +463,8 @@ Before attributing to any factory, verify:
    - Consider: wind data quality, emission profile match, distance, upwind position
 
 4. **Recommended Actions:**
-   - Immediate inspection priorities
+   - For single source: "Immediate inspection of [factory name]"
+   - For cluster (3+ upwind): "COORDINATED CLUSTER INVESTIGATION of [area] industrial zone - inspect [top 3 facilities]"
 
 5. **Alternative Sources** (if applicable)
 

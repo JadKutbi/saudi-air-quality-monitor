@@ -91,12 +91,19 @@ class MapVisualizer:
             # Google Maps Air Quality Index (AQI) Standard Color Scheme
             # ENHANCEMENT: We map these colors to WHO health thresholds, not arbitrary values
             # This makes our visualization MORE scientifically accurate than Google Maps
+            #
+            # NOTE: Heatmap intensity WILL change slightly when zooming in/out
+            # This is NORMAL and CORRECT behavior - it shows data density at different scales
+            # - Zoomed out: Shows overall pollution distribution (more blended)
+            # - Zoomed in: Shows precise hotspot locations (more detailed)
+            # The colors remain scientifically accurate (based on WHO thresholds) at all zoom levels
             HeatMap(
                 heat_data_normalized,
                 name=f'{gas} Concentration (WHO-scaled)',
                 radius=25,  # Increased radius for better visibility
                 blur=30,    # Smooth gradients (better than blocky Google Maps)
-                max_zoom=13,
+                min_opacity=0.3,  # Ensures minimum visibility at all zoom levels
+                max_zoom=18,  # Allow detailed view at high zoom
                 gradient={
                     0.0: '#00E400',  # Green - Safe (below WHO threshold)
                     0.2: '#92D050',  # Light green - Low

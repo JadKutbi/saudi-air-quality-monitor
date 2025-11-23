@@ -227,20 +227,28 @@ def create_insights_panel(pollution_data: Dict, city: str, validator) -> None:
             st.write("No significant correlations detected")
 
 def create_historical_comparison(pollution_data: Dict) -> None:
-    """Create historical comparison view"""
-    st.subheader("📆 Historical Context")
+    """Create WHO standards comparison view"""
+    st.subheader("📊 Compliance with WHO Air Quality Standards")
 
-    # Since we don't have historical data stored, we'll show current vs thresholds
+    # Compare current satellite measurements against WHO 2021 guidelines
     comparison_data = []
     for gas, data in pollution_data.items():
         if data.get('success'):
             threshold = config.GAS_THRESHOLDS.get(gas, {}).get('column_threshold', 100)
+            max_val = data['statistics']['max']
+            mean_val = data['statistics']['mean']
+
+            # Calculate compliance percentage
+            max_compliance = (max_val / threshold * 100) if threshold > 0 else 0
+            mean_compliance = (mean_val / threshold * 100) if threshold > 0 else 0
+
             comparison_data.append({
                 'Gas': gas,
-                'Current': data['statistics']['max'],
-                'Average': data['statistics']['mean'],
-                'WHO Threshold': threshold,
-                'Status': '🔴' if data['statistics']['max'] > threshold else '🟢'
+                'Peak Level': max_val,
+                'Average Level': mean_val,
+                'WHO Guideline': threshold,
+                'Peak % of Limit': max_compliance,
+                'Status': '🔴 Violation' if max_val > threshold else '🟢 Compliant'
             })
 
     if comparison_data:
@@ -249,18 +257,51 @@ def create_historical_comparison(pollution_data: Dict) -> None:
         # Create comparison chart
         fig = go.Figure()
 
-        fig.add_trace(go.Bar(name='Current Max', x=df['Gas'], y=df['Current'], marker_color='lightblue'))
-        fig.add_trace(go.Bar(name='Average', x=df['Gas'], y=df['Average'], marker_color='darkblue'))
-        fig.add_trace(go.Scatter(name='WHO Threshold', x=df['Gas'], y=df['WHO Threshold'],
-                                 mode='markers', marker=dict(color='red', size=10, symbol='line-ew')))
+        fig.add_trace(go.Bar(
+            name='Peak Concentration',
+            x=df['Gas'],
+            y=df['Peak Level'],
+            marker_color='#ef4444',
+            text=df['Peak % of Limit'].round(0),
+            texttemplate='%{text}%',
+            textposition='outside'
+        ))
+        fig.add_trace(go.Bar(
+            name='Spatial Average',
+            x=df['Gas'],
+            y=df['Average Level'],
+            marker_color='#3b82f6'
+        ))
+        fig.add_trace(go.Scatter(
+            name='WHO 2021 Guideline',
+            x=df['Gas'],
+            y=df['WHO Guideline'],
+            mode='lines+markers',
+            marker=dict(color='#22c55e', size=12, symbol='line-ew'),
+            line=dict(color='#22c55e', width=3, dash='dash')
+        ))
 
         fig.update_layout(
-            title="Current Levels vs WHO Thresholds",
+            title="Current Satellite Measurements vs WHO 2021 Air Quality Guidelines",
             barmode='group',
-            height=300,
-            xaxis_title="Pollutant",
-            yaxis_title="Concentration",
-            showlegend=True
+            height=350,
+            xaxis_title="Pollutant Gas",
+            yaxis_title="Concentration (Column Density)",
+            showlegend=True,
+            legend=dict(
+                orientation="h",
+                yanchor="bottom",
+                y=1.02,
+                xanchor="right",
+                x=1
+            )
         )
 
         st.plotly_chart(fig, use_container_width=True)
+
+        # Add compliance summary
+        violations = df[df['Status'].str.contains('Violation')]
+        if len(violations) > 0:
+            st.warning(f"⚠️ **{len(violations)} pollutant(s) exceeding WHO guidelines**: {', '.join(violations['Gas'].tolist())}")
+        else:
+            st.success("✅ All pollutants within WHO 2021 air quality guidelines")
