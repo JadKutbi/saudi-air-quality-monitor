@@ -296,8 +296,8 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No valid measurements (possible cloud cover)")
             
-            # Apply same conversion to statistics
-            # Convert statistics using same formula
+            # Convert statistics to display units and fix negative values
+            # Note: Negative values are sensor noise (physically impossible)
             if mean_val is not None:
                 molecules_cm2 = mean_val * 6.02214e19
                 if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
@@ -306,7 +306,8 @@ class SatelliteDataFetcher:
                     mean_val = molecules_cm2 / 1e18
                 elif gas == 'CH4':
                     mean_val = mean_val
-                
+                mean_val = max(0.0, mean_val)  # Clamp to zero (no negative pollution)
+
             if max_val is not None:
                 molecules_cm2 = max_val * 6.02214e19
                 if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
@@ -315,7 +316,8 @@ class SatelliteDataFetcher:
                     max_val = molecules_cm2 / 1e18
                 elif gas == 'CH4':
                     max_val = max_val
-                    
+                max_val = max(0.0, max_val)  # Clamp to zero
+
             if min_val is not None:
                 molecules_cm2 = min_val * 6.02214e19
                 if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
@@ -324,6 +326,7 @@ class SatelliteDataFetcher:
                     min_val = molecules_cm2 / 1e18
                 elif gas == 'CH4':
                     min_val = min_val
+                min_val = max(0.0, min_val)  # Clamp to zero (negative = sensor noise)
 
 
 

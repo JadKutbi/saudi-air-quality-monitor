@@ -717,10 +717,6 @@ def main():
 
         # Health Risk Panel
         create_health_risk_panel(pollution_data, validator)
-        st.divider()
-
-        # Data Quality Panel
-        create_data_quality_panel(pollution_data, validator)
 
     with tab3:
         st.header(f"🗺️ Pollution Map - {city}")
@@ -729,12 +725,7 @@ def main():
     with tab4:
         st.header("📈 Detailed Analysis")
 
-        # Historical comparison
-        create_historical_comparison(pollution_data)
-
-        st.divider()
-
-        # Original trends
+        # Display trends only
         display_trends(pollution_data)
 
     with tab5:
