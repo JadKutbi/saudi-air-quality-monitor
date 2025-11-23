@@ -155,20 +155,8 @@ class SatelliteDataFetcher:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
 
-            # Create median composite from up to 3 most recent images (FIXED COUNT)
-            # This gives consistent results while filling cloud gaps
-            if collection_count >= 2:
-                # Use exactly 3 most recent images
-                image = collection.sort('system:time_start', False).limit(3).median()
-                logger.info(f"Using median of 2 most recent images for {gas}")
-            #elif collection_count == 2:
-                # Use both images
-             #   image = collection.sort('system:time_start', False).limit(2).median()
-              #  logger.info(f"Using median of 2 most recent images for {gas}")
-            else:
-                # Single image - use as-is
-                image = most_recent
-                logger.info(f"Using single most recent image for {gas}")
+            image = most_recent
+            logger.info(f"Using single most recent image for {gas}")
             
             # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']
