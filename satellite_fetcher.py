@@ -119,23 +119,60 @@ class SatelliteDataFetcher:
         # Date range - Sentinel-5P data available from 2018-07-10
         end_date = datetime.now(pytz.UTC)
         start_date = end_date - timedelta(days=days_back)
-        
+
         try:
             # Load Sentinel-5P collection
             collection = ee.ImageCollection(gas_config["dataset"]) \
                 .filterBounds(aoi) \
-                .filterDate(start_date.strftime('%Y-%m-%d'), 
+                .filterDate(start_date.strftime('%Y-%m-%d'),
                            end_date.strftime('%Y-%m-%d')) \
                 .select(gas_config["band"])
-            
-            # Get the most recent image
+
+            # Check collection size first
+            collection_size = collection.size()
+            collection_count = collection_size.getInfo()
+
+            logger.info(f"Found {collection_count} images for {gas} in {city} over {days_back} days")
+
+            if collection_count == 0:
+                # Try a wider date range as fallback
+                logger.warning(f"No data in {days_back} days, trying {days_back * 3} days")
+                extended_start = end_date - timedelta(days=days_back * 3)
+
+                collection = ee.ImageCollection(gas_config["dataset"]) \
+                    .filterBounds(aoi) \
+                    .filterDate(extended_start.strftime('%Y-%m-%d'),
+                               end_date.strftime('%Y-%m-%d')) \
+                    .select(gas_config["band"])
+
+                collection_count = collection.size().getInfo()
+                logger.info(f"Extended search found {collection_count} images")
+
+                if collection_count == 0:
+                    logger.warning(f"No {gas} data available for {city} even in extended range")
+                    return self._create_empty_response(city, gas,
+                        error=f"No satellite data available in the past {days_back * 3} days")
+
+            # Try to get a good quality image or mosaic
+            # First try: Get the most recent image
             image = collection.sort('system:time_start', False).first()
-            
+
             # Check if image exists
             info = image.getInfo()
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
+
+            # Alternative: If single image has too few pixels, create a mosaic
+            # This helps when data is sparse or partially cloudy
+            if collection_count > 1:
+                logger.info(f"Creating mosaic from {min(collection_count, 5)} most recent images for better coverage")
+                # Get up to 5 most recent images and create a median composite
+                recent_collection = collection.sort('system:time_start', False).limit(5)
+                image = recent_collection.median()
+                # Keep the timestamp from the most recent image
+                most_recent = collection.sort('system:time_start', False).first()
+                info = most_recent.getInfo()
             
             # Get timestamp
             timestamp_ms = info['properties']['system:time_start']
@@ -145,7 +182,14 @@ class SatelliteDataFetcher:
             # Extract data as array
             band_data = image.select(gas_config["band"])
             
-            # Get statistics
+            # Get statistics with quality filtering
+            # Apply quality mask if available (filter out cloudy/bad pixels)
+            quality_band = f"{gas_config['band']}_qa"
+            if quality_band in info['bands']:
+                logger.info(f"Applying quality mask for {gas}")
+                qa_band = image.select(quality_band)
+                band_data = band_data.updateMask(qa_band.gte(0.5))  # Use pixels with QA >= 0.5
+
             stats = band_data.reduceRegion(
                 reducer=ee.Reducer.mean().combine(
                     reducer2=ee.Reducer.max(),
@@ -153,10 +197,14 @@ class SatelliteDataFetcher:
                 ).combine(
                     reducer2=ee.Reducer.min(),
                     sharedInputs=True
+                ).combine(
+                    reducer2=ee.Reducer.count(),
+                    sharedInputs=True
                 ),
                 geometry=aoi,
                 scale=1000,
-                maxPixels=1e9
+                maxPixels=1e9,
+                bestEffort=True  # Continue even with limited pixels
             ).getInfo()
             
             # Get pixel data with coordinates
@@ -204,10 +252,42 @@ class SatelliteDataFetcher:
             
             logger.info(f"Retrieved {len(pixels)} valid pixels for {gas} in {city}")
             
-            # Convert stats
+            # Convert stats - handle None values
             mean_val = stats.get(gas_config["band"] + '_mean')
             max_val = stats.get(gas_config["band"] + '_max')
             min_val = stats.get(gas_config["band"] + '_min')
+            count_val = stats.get(gas_config["band"] + '_count', 0)
+
+            # Check if we have valid data
+            if mean_val is None and max_val is None:
+                logger.warning(f"No valid pixels for {gas} in {city} after quality filtering")
+                # Try without quality filtering
+                logger.info(f"Retrying without quality filter for {gas}")
+                band_data = image.select(gas_config["band"])
+                stats = band_data.reduceRegion(
+                    reducer=ee.Reducer.mean().combine(
+                        reducer2=ee.Reducer.max(),
+                        sharedInputs=True
+                    ).combine(
+                        reducer2=ee.Reducer.min(),
+                        sharedInputs=True
+                    ),
+                    geometry=aoi,
+                    scale=2000,  # Try coarser scale
+                    maxPixels=1e9,
+                    bestEffort=True
+                ).getInfo()
+
+                mean_val = stats.get(gas_config["band"] + '_mean')
+                max_val = stats.get(gas_config["band"] + '_max')
+                min_val = stats.get(gas_config["band"] + '_min')
+
+                if mean_val is None and max_val is None:
+                    logger.error(f"Still no valid data for {gas} in {city}")
+                    return self._create_empty_response(city, gas,
+                        error=f"No valid measurements (possible cloud cover)")
+
+            logger.info(f"Stats for {gas}: mean={mean_val}, max={max_val}, min={min_val}, pixels={count_val}")
             
             # Apply same conversion to statistics
             # Convert statistics using same formula

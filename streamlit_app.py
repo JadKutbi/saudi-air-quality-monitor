@@ -166,10 +166,10 @@ def create_sidebar():
 
         days_back = st.slider(
             "Historical Data (days)",
-            min_value=1,
-            max_value=7,
-            value=3,
-            help="Number of days to analyze"
+            min_value=3,
+            max_value=14,
+            value=7,
+            help="Number of days to search for satellite data (Sentinel-5P has ~1-2 day revisit time)"
         )
 
         # Auto-refresh settings
@@ -279,16 +279,19 @@ def fetch_pollution_data(city: str, days_back: int):
 
     gases = list(config.GAS_PRODUCTS.keys())
     for i, gas in enumerate(gases):
-        status.text(f"Fetching {gas} data...")
+        status.text(f"🔍 Searching for {gas} data (past {days_back} days)...")
         progress.progress((i + 1) / len(gases))
 
         try:
             data = fetcher.fetch_gas_data(city, gas, days_back=days_back)
             if data and data.get('success'):
                 all_data[gas] = data
-                status.text(f"✅ {gas} data fetched successfully")
+                pixel_count = data.get('statistics', {}).get('pixel_count', 0)
+                status.text(f"✅ {gas} data fetched ({pixel_count} pixels)")
             else:
-                errors.append(f"{gas}: No data available")
+                error_msg = data.get('error', 'No data available') if data else 'No data available'
+                errors.append(f"{gas}: {error_msg}")
+                status.text(f"⚠️ {gas}: {error_msg}")
         except Exception as e:
             error_msg = str(e)
             errors.append(f"{gas}: {error_msg}")
