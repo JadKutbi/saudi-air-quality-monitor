@@ -141,31 +141,48 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # CRITICAL: Use SINGLE most recent observation only for wind synchronization
+            # COMPROMISE: Use median of images from SAME DAY ONLY
             #
-            # WHY NOT blend multiple days?
-            # - Wind direction changes DAILY
-            # - If we blend pollution from multiple days but use wind from only one day,
-            #   we get INCORRECT pollution source attribution
+            # Problem with single image: Too much cloud cover → no data
+            # Problem with multi-day median: Wind changes daily → wrong attribution
             #
-            # Example of the problem with median of 2+ images:
-            #   📅 Nov 23, 13:30 - Wind from EAST (110°) → Factory A is upwind
-            #   📅 Nov 22, 13:30 - Wind from WEST (290°) → Factory B is upwind
-            #   Median pollution: Blended from BOTH days (both factories contribute)
-            #   Wind data shown: Nov 23 only (EAST)
-            #   ❌ Result: System blames Factory A, but half the pollution is from Factory B!
-            #
-            # CORRECT APPROACH: Single observation = pollution + wind from same exact moment ✓
-            #
-            # Trade-off: Some cloud gaps in heatmap, but source attribution is scientifically accurate
-            # This is how NASA and professional air quality systems operate.
+            # SOLUTION: Use median of all passes from the most recent day
+            # - Sentinel-5P passes over each location 1-2 times per day
+            # - Wind conditions are similar throughout same day
+            # - Median fills cloud gaps from multiple passes
+            # - Attribution remains accurate (same day wind)
 
-            image = collection.sort('system:time_start', False).first()
-            info = image.getInfo()
+            # Get the most recent image to find its date
+            most_recent = collection.sort('system:time_start', False).first()
+            info = most_recent.getInfo()
 
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
+
+            # Get the date of the most recent observation
+            timestamp_ms = info['properties']['system:time_start']
+            timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+
+            # Filter to only images from that same day
+            day_start = timestamp_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+            day_end = day_start + timedelta(days=1)
+
+            same_day_collection = collection.filterDate(
+                day_start.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                day_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+            )
+
+            same_day_count = same_day_collection.size().getInfo()
+            logger.info(f"Found {same_day_count} images from {day_start.date()} for {gas}")
+
+            # Use median of all images from that day (fills cloud gaps)
+            if same_day_count > 1:
+                image = same_day_collection.median()
+                logger.info(f"Using median of {same_day_count} observations from same day")
+            else:
+                image = most_recent
+                logger.info(f"Using single observation from {day_start.date()}")
             
             # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']
@@ -191,7 +208,7 @@ class SatelliteDataFetcher:
                     sharedInputs=True
                 ),
                 geometry=aoi,
-                scale=5000,  # Use coarser scale for better coverage with single images
+                scale=1000,
                 maxPixels=1e9,
                 bestEffort=True
             ).getInfo()
@@ -201,8 +218,7 @@ class SatelliteDataFetcher:
             combined = band_data.addBands(lat_lon)
             
             # Sample the region at different scales to handle sparse data
-            # Start with coarser scale for single images (better coverage)
-            scales = [5000, 10000, 2000, 1000]  # Try coarse first
+            scales = [1000, 2000, 5000, 10000]
             sample_count = 0
             samples = None
 
@@ -216,7 +232,6 @@ class SatelliteDataFetcher:
                     )
                     sample_count = samples.size().getInfo()
                     if sample_count > 0:
-                        logger.info(f"Got {sample_count} samples at scale {scale}m")
                         break
                 except Exception:
                     continue

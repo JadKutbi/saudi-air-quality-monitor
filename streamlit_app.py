@@ -169,7 +169,7 @@ def create_sidebar():
             min_value=1,
             max_value=14,
             value=3,
-            help="How far back to search for satellite data. System ALWAYS uses the single most recent observation to ensure wind direction matches pollution data (critical for accurate source attribution). Values will be identical across all slider positions."
+            help="How far back to search for satellite data. System uses median of all observations from the most recent day (ensures wind sync while filling cloud gaps). Values will be identical across all slider positions."
         )
 
         # Auto-refresh settings
