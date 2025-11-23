@@ -492,6 +492,6 @@ NOTIFICATION_CONFIG = {
     },
 }
 
-GEE_PROJECT = 'ee-jadkutbi'
+GEE_PROJECT = 'rcjyenviroment'
 LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
