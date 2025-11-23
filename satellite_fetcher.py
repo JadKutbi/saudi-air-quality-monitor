@@ -141,22 +141,31 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # SOLUTION: Use FIXED median of 3 most recent images for consistent values + cloud coverage
-            # - This ensures VALUES are consistent (always same 3 images if available)
-            # - Provides better cloud coverage than single image
-            # - Still represents latest data (most recent 3 passes)
-            # - days_back only affects which images are AVAILABLE to choose from
+            # CRITICAL: Use SINGLE most recent observation only for wind synchronization
+            #
+            # WHY NOT blend multiple days?
+            # - Wind direction changes DAILY
+            # - If we blend pollution from multiple days but use wind from only one day,
+            #   we get INCORRECT pollution source attribution
+            #
+            # Example of the problem with median of 2+ images:
+            #   📅 Nov 23, 13:30 - Wind from EAST (110°) → Factory A is upwind
+            #   📅 Nov 22, 13:30 - Wind from WEST (290°) → Factory B is upwind
+            #   Median pollution: Blended from BOTH days (both factories contribute)
+            #   Wind data shown: Nov 23 only (EAST)
+            #   ❌ Result: System blames Factory A, but half the pollution is from Factory B!
+            #
+            # CORRECT APPROACH: Single observation = pollution + wind from same exact moment ✓
+            #
+            # Trade-off: Some cloud gaps in heatmap, but source attribution is scientifically accurate
+            # This is how NASA and professional air quality systems operate.
 
-            # Get the most recent image for timestamp reporting
-            most_recent = collection.sort('system:time_start', False).first()
-            info = most_recent.getInfo()
+            image = collection.sort('system:time_start', False).first()
+            info = image.getInfo()
 
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
-
-            image = most_recent
-            logger.info(f"Using single most recent image for {gas}")
             
             # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']
