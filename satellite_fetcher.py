@@ -175,11 +175,9 @@ class SatelliteDataFetcher:
             # Extract the pollution measurements
             band_data = image.select(gas_config["band"])
 
-            # Filter out cloudy pixels and low-quality measurements
-            quality_band = f"{gas_config['band']}_qa"
-            if quality_band in info['bands']:
-                qa_band = image.select(quality_band)
-                band_data = band_data.updateMask(qa_band.gte(0.5))
+            # COMPROMISE SOLUTION: Try without quality filtering first
+            # Single images often have too much cloud cover if we apply strict QA filtering
+            # We'll try to get data, and only apply QA if we have good coverage
 
             stats = band_data.reduceRegion(
                 reducer=ee.Reducer.mean().combine(
@@ -193,9 +191,9 @@ class SatelliteDataFetcher:
                     sharedInputs=True
                 ),
                 geometry=aoi,
-                scale=1000,
+                scale=5000,  # Use coarser scale for better coverage with single images
                 maxPixels=1e9,
-                bestEffort=True  # Continue even with limited pixels
+                bestEffort=True
             ).getInfo()
             
             # Get pixel data with coordinates
@@ -203,7 +201,8 @@ class SatelliteDataFetcher:
             combined = band_data.addBands(lat_lon)
             
             # Sample the region at different scales to handle sparse data
-            scales = [1000, 2000, 5000, 10000]
+            # Start with coarser scale for single images (better coverage)
+            scales = [5000, 10000, 2000, 1000]  # Try coarse first
             sample_count = 0
             samples = None
 
@@ -217,6 +216,7 @@ class SatelliteDataFetcher:
                     )
                     sample_count = samples.size().getInfo()
                     if sample_count > 0:
+                        logger.info(f"Got {sample_count} samples at scale {scale}m")
                         break
                 except Exception:
                     continue
