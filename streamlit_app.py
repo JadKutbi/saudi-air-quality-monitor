@@ -92,25 +92,49 @@ if 'alert_thresholds' not in st.session_state:
 
 @st.cache_resource
 def initialize_services():
-    """Initialize services"""
-    try:
-        vertex_project = st.secrets.get("GEE_PROJECT", os.getenv("GEE_PROJECT"))
-        vertex_location = st.secrets.get("VERTEX_LOCATION", os.getenv("VERTEX_LOCATION", "us-central1"))
-        gemini_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
+    """Initialize services with graceful error handling"""
+    services = {}
 
+    vertex_project = st.secrets.get("VERTEX_PROJECT_ID", os.getenv("VERTEX_PROJECT_ID"))
+    vertex_location = st.secrets.get("VERTEX_LOCATION", os.getenv("VERTEX_LOCATION", "us-central1"))
+    gemini_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
+
+    # Initialize each service with error handling
+    try:
         fetcher = SatelliteDataFetcher()
+        services['fetcher'] = fetcher
+    except Exception as e:
+        st.warning(f"Satellite data fetcher initialization issue: {str(e)}")
+        services['fetcher'] = None
+
+    try:
         analyzer = PollutionAnalyzer(
             gemini_api_key=gemini_key,
             vertex_project=vertex_project,
             vertex_location=vertex_location
         )
-        visualizer = MapVisualizer()
-        validator = DataValidator()
-
-        return fetcher, analyzer, visualizer, validator
+        services['analyzer'] = analyzer
     except Exception as e:
-        st.error(f"Failed to initialize services: {str(e)}")
-        st.stop()
+        st.warning(f"AI analyzer initialization issue: {str(e)}")
+        services['analyzer'] = None
+
+    try:
+        visualizer = MapVisualizer()
+        services['visualizer'] = visualizer
+    except Exception as e:
+        st.warning(f"Map visualizer initialization issue: {str(e)}")
+        services['visualizer'] = None
+
+    try:
+        validator = DataValidator()
+        services['validator'] = validator
+    except Exception as e:
+        st.warning(f"Data validator initialization issue: {str(e)}")
+        services['validator'] = None
+
+    # Return services (some may be None)
+    return (services.get('fetcher'), services.get('analyzer'),
+            services.get('visualizer'), services.get('validator'))
 
 def create_header():
     """Header section"""
@@ -186,6 +210,38 @@ def create_sidebar():
         if st.session_state.last_update:
             st.info(f"Last update: {st.session_state.last_update}")
 
+        # Connection diagnostics
+        st.divider()
+        with st.expander("🔧 Connection Diagnostics"):
+            if st.button("Test Earth Engine Connection", use_container_width=True):
+                with st.spinner("Testing connection..."):
+                    try:
+                        import ee
+                        # Test basic connection
+                        test_number = ee.Number(1).getInfo()
+                        st.success("✅ Earth Engine connection successful!")
+
+                        # Test project access
+                        try:
+                            test_collection = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_NO2").limit(1).getInfo()
+                            st.success("✅ Can access Sentinel-5P data!")
+                        except Exception as e:
+                            st.error(f"❌ Cannot access Sentinel-5P: {str(e)}")
+
+                        # Check credentials
+                        if st.secrets.get("GEE_SERVICE_ACCOUNT"):
+                            st.info(f"Using service account: {st.secrets['GEE_SERVICE_ACCOUNT'][:30]}...")
+                        else:
+                            st.warning("No service account configured - using default auth")
+
+                    except Exception as e:
+                        st.error(f"❌ Connection failed: {str(e)}")
+                        st.info("Please check:")
+                        st.write("1. GEE_SERVICE_ACCOUNT in secrets")
+                        st.write("2. GEE_PRIVATE_KEY in secrets")
+                        st.write("3. Service account has Earth Engine access")
+                        st.write("4. Project ID is correct")
+
         st.divider()
         st.subheader("ℹ️ About")
         st.markdown("""
@@ -204,9 +260,19 @@ def create_sidebar():
 
 @st.cache_data(ttl=1800)
 def fetch_pollution_data(city: str, days_back: int):
-    """Fetch pollution data"""
+    """Fetch pollution data with improved error handling"""
     fetcher, analyzer, _, _ = initialize_services()
+
+    if not fetcher:
+        st.error("❌ Cannot connect to Earth Engine satellite data")
+        st.info("Please check:")
+        st.write("• Google Earth Engine authentication")
+        st.write("• Service account credentials in Streamlit secrets")
+        st.write("• Use the Connection Diagnostics tool in the sidebar")
+        return {}
+
     all_data = {}
+    errors = []
 
     progress = st.progress(0)
     status = st.empty()
@@ -218,13 +284,32 @@ def fetch_pollution_data(city: str, days_back: int):
 
         try:
             data = fetcher.fetch_gas_data(city, gas, days_back=days_back)
-            if data['success']:
+            if data and data.get('success'):
                 all_data[gas] = data
+                status.text(f"✅ {gas} data fetched successfully")
+            else:
+                errors.append(f"{gas}: No data available")
         except Exception as e:
-            st.warning(f"Could not fetch {gas} data: {str(e)}")
+            error_msg = str(e)
+            errors.append(f"{gas}: {error_msg}")
+            # Log but continue with other gases
+            print(f"Error fetching {gas}: {error_msg}")
 
     progress.empty()
     status.empty()
+
+    # Show summary of errors if any
+    if errors and len(errors) == len(gases):
+        # All gases failed - likely a systemic issue
+        st.error("Failed to fetch data for all gases")
+        with st.expander("Error Details"):
+            for error in errors:
+                st.write(f"• {error}")
+    elif errors:
+        # Some gases failed
+        with st.expander(f"⚠️ Partial data issues ({len(errors)} gases)"):
+            for error in errors:
+                st.write(f"• {error}")
 
     return all_data
 

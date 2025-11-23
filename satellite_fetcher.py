@@ -22,6 +22,8 @@ class SatelliteDataFetcher:
     
     def __init__(self):
         """Initialize Google Earth Engine and Enhanced Wind Fetcher"""
+        self.ee_initialized = False
+
         try:
             # Try to get service account from Streamlit secrets first
             import streamlit as st
@@ -33,37 +35,82 @@ class SatelliteDataFetcher:
                     key_data=st.secrets['GEE_PRIVATE_KEY']
                 )
                 ee.Initialize(credentials, project=config.GEE_PROJECT)
-                logger.info("Google Earth Engine initialized with service account")
+                logger.info(f"Google Earth Engine initialized with service account for project: {config.GEE_PROJECT}")
+                self.ee_initialized = True
             else:
                 # Fallback to default authentication (for local development)
                 ee.Initialize(project=config.GEE_PROJECT)
-                logger.info("Google Earth Engine initialized with default auth")
+                logger.info(f"Google Earth Engine initialized with default auth for project: {config.GEE_PROJECT}")
+                self.ee_initialized = True
+
+            # Test the connection
+            self._test_ee_connection()
+
         except Exception as e:
-            logger.error(f"Failed to initialize GEE: {e}")
+            error_msg = str(e)
+            logger.error(f"Failed to initialize GEE: {error_msg}")
+
+            # Provide specific error guidance
+            if "401" in error_msg or "403" in error_msg:
+                logger.error("Authentication failed. Check your service account credentials.")
+            elif "Permission" in error_msg:
+                logger.error("Permission denied. Ensure the service account has Earth Engine access.")
+            elif "project" in error_msg.lower():
+                logger.error(f"Project issue. Verify project ID: {config.GEE_PROJECT}")
+
             logger.info("For Streamlit Cloud: Add GEE_SERVICE_ACCOUNT and GEE_PRIVATE_KEY to secrets")
             logger.info("For local: Run 'earthengine authenticate'")
-            raise
+
+            # Don't raise here, let the fetch methods handle it
+            self.ee_initialized = False
 
         # Initialize enhanced wind fetcher with all API sources
-        self.enhanced_wind_fetcher = EnhancedWindFetcher()
-        logger.info("Enhanced wind fetcher initialized with multiple sources")
+        try:
+            self.enhanced_wind_fetcher = EnhancedWindFetcher()
+            logger.info("Enhanced wind fetcher initialized with multiple sources")
+        except Exception as e:
+            logger.warning(f"Wind fetcher initialization failed: {e}")
+            self.enhanced_wind_fetcher = None
+
+    def _test_ee_connection(self):
+        """Test Earth Engine connection"""
+        try:
+            # Simple test to verify connection
+            test = ee.Number(1).getInfo()
+            logger.info("Earth Engine connection test successful")
+        except Exception as e:
+            logger.error(f"Earth Engine connection test failed: {e}")
+            raise Exception(f"Cannot connect to Earth Engine: {e}")
     
     def fetch_gas_data(self, city: str, gas: str, days_back: int = 3) -> Dict:
         """
         Fetch gas concentration data for a specific city
-        
+
         Args:
             city: City name (Yanbu, Jubail, Jazan)
             gas: Gas type (NO2, SO2, CO, O3, HCHO, CH4)
             days_back: Number of days to look back for data
-            
+
         Returns:
             Dictionary with gas data, timestamp, and statistics
         """
         logger.info(f"Fetching {gas} data for {city}")
-        
-        city_config = config.CITIES[city]
-        gas_config = config.GAS_PRODUCTS[gas]
+
+        # Check if Earth Engine is initialized
+        if not self.ee_initialized:
+            logger.error(f"Cannot fetch {gas} data - Earth Engine not initialized")
+            return self._create_empty_response(city, gas, error="Earth Engine not initialized. Check authentication.")
+
+        city_config = config.CITIES.get(city)
+        gas_config = config.GAS_PRODUCTS.get(gas)
+
+        if not city_config:
+            logger.error(f"Unknown city: {city}")
+            return self._create_empty_response(city, gas, error=f"Unknown city: {city}")
+
+        if not gas_config:
+            logger.error(f"Unknown gas: {gas}")
+            return self._create_empty_response(city, gas, error=f"Unknown gas: {gas}")
         
         # Define area of interest
         bbox = city_config["bbox"]
