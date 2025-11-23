@@ -195,13 +195,18 @@ def display_metrics(pollution_data: Dict):
     """Display metrics"""
     st.subheader("📊 Current Air Quality Metrics")
 
-    cols = st.columns(len(pollution_data))
+    # Filter for successful data
+    valid_data = {gas: data for gas, data in pollution_data.items() if data.get('success')}
 
-    for i, (gas, data) in enumerate(pollution_data.items()):
-        if not data.get('success'):
-            continue
+    if not valid_data:
+        st.warning("No pollution data available. Please try again later.")
+        return
 
-        with cols[i]:
+    # Create columns based on valid data count
+    cols = st.columns(min(len(valid_data), 6))  # Max 6 columns for better display
+
+    for i, (gas, data) in enumerate(valid_data.items()):
+        with cols[i % len(cols)]:
             threshold_info = config.GAS_THRESHOLDS.get(gas, {})
             threshold = threshold_info.get('column_threshold', float('inf'))
             critical = threshold_info.get('critical_threshold', float('inf'))
@@ -485,6 +490,15 @@ def main():
 
     pollution_data = st.session_state.pollution_data
 
+    # Check if we have any data
+    if not pollution_data:
+        st.error("❌ Unable to fetch pollution data. Please check your connection and try again.")
+        st.info("Possible reasons: Google Earth Engine authentication issues, network problems, or no recent satellite data.")
+        if st.button("Retry"):
+            st.session_state.pollution_data = {}
+            st.rerun()
+        return
+
     with tab1:
         st.header(f"Air Quality Overview - {city}")
         display_metrics(pollution_data)
@@ -502,7 +516,10 @@ def main():
         with col2:
             st.metric("Violations Detected", violations_count)
         with col3:
-            st.metric("Data Quality", "High" if all(d.get('success') for d in pollution_data.values()) else "Partial")
+            if pollution_data:
+                st.metric("Data Quality", "High" if all(d.get('success') for d in pollution_data.values()) else "Partial")
+            else:
+                st.metric("Data Quality", "No Data")
 
     with tab2:
         st.header(f"Pollution Map - {city}")
