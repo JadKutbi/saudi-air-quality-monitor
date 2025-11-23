@@ -141,8 +141,9 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # Get the latest satellite observation
-            # Note: We always use the MOST RECENT data available
+            # CRITICAL: ALWAYS use the SINGLE most recent observation only
+            # The days_back parameter only controls how far to SEARCH if no recent data exists
+            # It should NOT blend multiple days together (that would give inconsistent results)
             image = collection.sort('system:time_start', False).first()
 
             # Verify the image is valid
@@ -150,15 +151,6 @@ class SatelliteDataFetcher:
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
-
-            # For better coverage, combine multiple recent images (helps fill gaps from clouds)
-            if collection_count > 1:
-                # Blend the 5 most recent satellite passes to create a complete picture
-                recent_collection = collection.sort('system:time_start', False).limit(5)
-                image = recent_collection.median()
-                # Still report the time of the latest observation
-                most_recent = collection.sort('system:time_start', False).first()
-                info = most_recent.getInfo()
             
             # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']

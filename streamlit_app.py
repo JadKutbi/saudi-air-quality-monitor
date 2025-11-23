@@ -165,11 +165,11 @@ def create_sidebar():
         st.session_state.selected_city = selected_city
 
         days_back = st.slider(
-            "Historical Data (days)",
+            "Search Period (days)",
             min_value=1,
             max_value=14,
             value=3,
-            help="Number of days to search for satellite data (Auto-extends if no data found)"
+            help="How far back to search for satellite data. Note: Always displays the MOST RECENT observation found, not an average."
         )
 
         # Auto-refresh settings
