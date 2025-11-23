@@ -35,15 +35,11 @@ class SatelliteDataFetcher:
                     key_data=st.secrets['GEE_PRIVATE_KEY']
                 )
                 ee.Initialize(credentials, project=config.GEE_PROJECT)
-                logger.info(f"Google Earth Engine initialized with service account for project: {config.GEE_PROJECT}")
                 self.ee_initialized = True
             else:
-                # Fallback to default authentication (for local development)
                 ee.Initialize(project=config.GEE_PROJECT)
-                logger.info(f"Google Earth Engine initialized with default auth for project: {config.GEE_PROJECT}")
                 self.ee_initialized = True
 
-            # Test the connection
             self._test_ee_connection()
 
         except Exception as e:
@@ -64,10 +60,9 @@ class SatelliteDataFetcher:
             # Don't raise here, let the fetch methods handle it
             self.ee_initialized = False
 
-        # Initialize enhanced wind fetcher with all API sources
+        # Initialize enhanced wind fetcher with multiple API sources
         try:
             self.enhanced_wind_fetcher = EnhancedWindFetcher()
-            logger.info("Enhanced wind fetcher initialized with multiple sources")
         except Exception as e:
             logger.warning(f"Wind fetcher initialization failed: {e}")
             self.enhanced_wind_fetcher = None
@@ -75,31 +70,24 @@ class SatelliteDataFetcher:
     def _test_ee_connection(self):
         """Test Earth Engine connection"""
         try:
-            # Simple test to verify connection
-            test = ee.Number(1).getInfo()
-            logger.info("Earth Engine connection test successful")
+            ee.Number(1).getInfo()
         except Exception as e:
             logger.error(f"Earth Engine connection test failed: {e}")
             raise Exception(f"Cannot connect to Earth Engine: {e}")
     
     def fetch_gas_data(self, city: str, gas: str, days_back: int = 3) -> Dict:
         """
-        Fetch gas concentration data for a specific city
+        Retrieve the latest satellite measurements for a specific pollutant gas in a city.
 
-        Args:
-            city: City name (Yanbu, Jubail, Jazan)
-            gas: Gas type (NO2, SO2, CO, O3, HCHO, CH4)
-            days_back: Number of days to look back for data
-
-        Returns:
-            Dictionary with gas data, timestamp, and statistics
+        This searches for the most recent Sentinel-5P satellite observations and
+        provides both detailed pixel data (for mapping) and summary statistics.
         """
         logger.info(f"Fetching {gas} data for {city}")
 
-        # Check if Earth Engine is initialized
+        # Verify satellite data connection is working
         if not self.ee_initialized:
             logger.error(f"Cannot fetch {gas} data - Earth Engine not initialized")
-            return self._create_empty_response(city, gas, error="Earth Engine not initialized. Check authentication.")
+            return self._create_empty_response(city, gas, error="Satellite connection not available. Check authentication.")
 
         city_config = config.CITIES.get(city)
         gas_config = config.GAS_PRODUCTS.get(gas)
@@ -112,30 +100,30 @@ class SatelliteDataFetcher:
             logger.error(f"Unknown gas: {gas}")
             return self._create_empty_response(city, gas, error=f"Unknown gas: {gas}")
         
-        # Define area of interest
+        # Set up the geographic area and time period to search
         bbox = city_config["bbox"]
         aoi = ee.Geometry.Rectangle(bbox)
-        
-        # Date range - Sentinel-5P data available from 2018-07-10
+
+        # Search for satellite observations from the last few days
         end_date = datetime.now(pytz.UTC)
         start_date = end_date - timedelta(days=days_back)
 
         try:
-            # Load Sentinel-5P collection
+            # Search for satellite images that captured this area
             collection = ee.ImageCollection(gas_config["dataset"]) \
                 .filterBounds(aoi) \
                 .filterDate(start_date.strftime('%Y-%m-%d'),
                            end_date.strftime('%Y-%m-%d')) \
                 .select(gas_config["band"])
 
-            # Check collection size first
+            # Count how many satellite passes we found
             collection_size = collection.size()
             collection_count = collection_size.getInfo()
 
             logger.info(f"Found {collection_count} images for {gas} in {city} over {days_back} days")
 
             if collection_count == 0:
-                # Try a wider date range as fallback
+                # No recent data found - try looking back further
                 logger.warning(f"No data in {days_back} days, trying {days_back * 3} days")
                 extended_start = end_date - timedelta(days=days_back * 3)
 
@@ -153,42 +141,38 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # Try to get a good quality image or mosaic
-            # First try: Get the most recent image
+            # Get the latest satellite observation
+            # Note: We always use the MOST RECENT data available
             image = collection.sort('system:time_start', False).first()
 
-            # Check if image exists
+            # Verify the image is valid
             info = image.getInfo()
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
 
-            # Alternative: If single image has too few pixels, create a mosaic
-            # This helps when data is sparse or partially cloudy
+            # For better coverage, combine multiple recent images (helps fill gaps from clouds)
             if collection_count > 1:
-                logger.info(f"Creating mosaic from {min(collection_count, 5)} most recent images for better coverage")
-                # Get up to 5 most recent images and create a median composite
+                # Blend the 5 most recent satellite passes to create a complete picture
                 recent_collection = collection.sort('system:time_start', False).limit(5)
                 image = recent_collection.median()
-                # Keep the timestamp from the most recent image
+                # Still report the time of the latest observation
                 most_recent = collection.sort('system:time_start', False).first()
                 info = most_recent.getInfo()
             
-            # Get timestamp
+            # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']
             timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
             timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
-            
-            # Extract data as array
+
+            # Extract the pollution measurements
             band_data = image.select(gas_config["band"])
-            
-            # Get statistics with quality filtering
-            # Apply quality mask if available (filter out cloudy/bad pixels)
+
+            # Filter out cloudy pixels and low-quality measurements
             quality_band = f"{gas_config['band']}_qa"
             if quality_band in info['bands']:
-                logger.info(f"Applying quality mask for {gas}")
                 qa_band = image.select(quality_band)
-                band_data = band_data.updateMask(qa_band.gte(0.5))  # Use pixels with QA >= 0.5
+                band_data = band_data.updateMask(qa_band.gte(0.5))
 
             stats = band_data.reduceRegion(
                 reducer=ee.Reducer.mean().combine(
@@ -211,9 +195,8 @@ class SatelliteDataFetcher:
             lat_lon = ee.Image.pixelLonLat()
             combined = band_data.addBands(lat_lon)
             
-            # Sample the region with fallback scales
-            # Try different scales to get samples
-            scales = [1000, 2000, 5000, 10000]  # Try progressively coarser scales
+            # Sample the region at different scales to handle sparse data
+            scales = [1000, 2000, 5000, 10000]
             sample_count = 0
             samples = None
 
@@ -223,41 +206,32 @@ class SatelliteDataFetcher:
                         region=aoi,
                         scale=scale,
                         geometries=True,
-                        numPixels=500  # Limit number of pixels for performance
+                        numPixels=500
                     )
                     sample_count = samples.size().getInfo()
                     if sample_count > 0:
-                        logger.info(f"Sample count for {gas} at scale {scale}m: {sample_count}")
                         break
-                    else:
-                        logger.debug(f"No samples at scale {scale}m, trying coarser scale")
-                except Exception as e:
-                    logger.debug(f"Sampling failed at scale {scale}m: {e}")
+                except Exception:
                     continue
 
             pixels = []
             if sample_count > 0:
-                # Convert to list only if we have samples
                 sample_list = samples.toList(sample_count).getInfo()
 
-                # Extract pixel data
+                # Extract and convert pixel data to display units
                 for sample in sample_list:
                     props = sample['properties']
                     if gas_config["band"] in props and props[gas_config["band"]] is not None:
-                        # Get raw value in mol/m²
                         raw_value = props[gas_config["band"]]
+                        molecules_per_cm2 = raw_value * 6.02214e19
 
-                        # Convert mol/m² to molecules/cm² then to display units
-                        # Multiply by Avogadro's number divided by 10000 (m² to cm² conversion)
-                        molecules_per_cm2 = raw_value * 6.02214e19  # mol/m² to molecules/cm²
-
-                        # Scale to display units
+                        # Scale to appropriate display units
                         if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
-                            value = molecules_per_cm2 / 1e15  # Display as 10^15 molecules/cm²
+                            value = molecules_per_cm2 / 1e15
                         elif gas == 'CO':
-                            value = molecules_per_cm2 / 1e18  # Display as 10^18 molecules/cm²
+                            value = molecules_per_cm2 / 1e18
                         elif gas == 'CH4':
-                            value = raw_value  # Already in ppb
+                            value = raw_value
                         else:
                             value = molecules_per_cm2 / 1e15
 
@@ -267,26 +241,16 @@ class SatelliteDataFetcher:
                             'value': value
                         })
 
-            
-            logger.info(f"Retrieved {len(pixels)} valid pixels for {gas} in {city}")
-
             # Convert stats - handle None values
             mean_val = stats.get(gas_config["band"] + '_mean')
             max_val = stats.get(gas_config["band"] + '_max')
             min_val = stats.get(gas_config["band"] + '_min')
             count_val = stats.get(gas_config["band"] + '_count', 0)
 
-            # If we have no pixels but have statistics, that's still valid data
-            # (happens when data exists but sampling fails)
-            if len(pixels) == 0 and (mean_val is not None or max_val is not None):
-                logger.info(f"No pixel samples but statistics available for {gas}")
-                # We'll proceed with just statistics
-
             # Check if we have valid data (either pixels or statistics)
+            # Note: Having statistics without pixels is normal for sparse data
             if mean_val is None and max_val is None and len(pixels) == 0:
-                logger.warning(f"No valid pixels for {gas} in {city} after quality filtering")
-                # Try without quality filtering
-                logger.info(f"Retrying without quality filter for {gas}")
+                # Retry without quality filtering
                 band_data = image.select(gas_config["band"])
                 stats = band_data.reduceRegion(
                     reducer=ee.Reducer.mean().combine(
@@ -307,11 +271,8 @@ class SatelliteDataFetcher:
                 min_val = stats.get(gas_config["band"] + '_min')
 
                 if mean_val is None and max_val is None:
-                    logger.error(f"Still no valid data for {gas} in {city}")
                     return self._create_empty_response(city, gas,
                         error=f"No valid measurements (possible cloud cover)")
-
-            logger.info(f"Stats for {gas}: mean={mean_val}, max={max_val}, min={min_val}, pixels={count_val}")
             
             # Apply same conversion to statistics
             # Convert statistics using same formula
@@ -344,7 +305,8 @@ class SatelliteDataFetcher:
 
 
 
-            # Fetch wind data synchronized with satellite timestamp
+            # Get wind data that matches the satellite observation time
+            # This ensures wind arrows point in the correct direction for this specific moment
             wind_data = {}
             if self.enhanced_wind_fetcher:
                 try:
@@ -353,7 +315,7 @@ class SatelliteDataFetcher:
                     logger.warning(f"Could not fetch wind data: {e}")
                     wind_data = {'success': False, 'error': str(e)}
 
-            # Determine success based on having either pixels or statistics
+            # Check if we successfully got usable pollution data
             has_valid_data = (mean_val is not None or max_val is not None or len(pixels) > 0)
 
             if has_valid_data:
@@ -379,49 +341,38 @@ class SatelliteDataFetcher:
                 logger.error(f"No valid data found for {gas} in {city}")
                 return self._create_empty_response(city, gas,
                     error="No valid data after all attempts")
-            
+
         except Exception as e:
             logger.error(f"Error fetching {gas} data for {city}: {e}")
-            logger.debug(f"Date range: {start_date} to {end_date}")
-            logger.debug(f"Dataset: {gas_config['dataset']}")
-            logger.debug(f"Bounding box: {bbox}")
-            return self._create_empty_response(city, gas, error=f"Sentinel-5P error: {str(e)}")
+            return self._create_empty_response(city, gas, error=f"Satellite data error: {str(e)}")
 
     
     def fetch_wind_data(self, city: str, target_time: Optional[datetime] = None) -> Dict:
         """
-        Fetch wind data using enhanced multi-source approach with time synchronization.
-        Automatically uses all configured APIs (Tomorrow.io, OpenWeatherMap, WeatherAPI)
-        and picks the source with the closest time match to the satellite measurement.
+        Get wind conditions that match the satellite observation time.
 
-        Args:
-            city: City name
-            target_time: Exact timestamp (UTC) of satellite measurement
+        This function automatically searches through multiple weather data sources
+        (Tomorrow.io, OpenWeatherMap, WeatherAPI) to find the wind reading closest
+        in time to when the satellite passed overhead. This ensures accurate wind
+        direction for tracing pollution back to its source.
 
-        Returns:
-            Dictionary with wind data, confidence score, and time difference
+        The function returns a confidence score showing how well the wind data
+        matches the satellite timing.
         """
         if target_time is None:
             target_time = datetime.now(pytz.UTC)
         else:
             target_time = target_time.astimezone(pytz.UTC)
 
-        logger.info(f"Fetching wind data for {city} at {target_time.strftime('%Y-%m-%d %H:%M:%S UTC')}")
-
         # Determine appropriate time tolerance based on data age
         hours_ago = abs((datetime.now(pytz.UTC) - target_time).total_seconds() / 3600)
 
         if hours_ago <= 3:
-            # Recent data - strict tolerance
-            max_tolerance = 30  # 30 minutes
+            max_tolerance = 30  # Recent data - strict tolerance
         elif hours_ago <= 24:
-            # Within a day - moderate tolerance
-            max_tolerance = 45  # 45 minutes
+            max_tolerance = 45  # Within a day - moderate tolerance
         else:
-            # Historical data - relaxed tolerance (hourly data sources)
-            max_tolerance = 60  # 60 minutes (accept hourly data)
-
-        logger.info(f"Using time tolerance of {max_tolerance} minutes (data is {hours_ago:.1f} hours old)")
+            max_tolerance = 60  # Historical data - relaxed tolerance
 
         # Use enhanced fetcher with all 3 API sources
         wind_data = self.enhanced_wind_fetcher.fetch_wind_data(
@@ -430,24 +381,11 @@ class SatelliteDataFetcher:
             max_time_diff_minutes=max_tolerance
         )
 
-        # Log the result
-        if wind_data.get('confidence', 0) >= 70:
-            logger.info(
-                f"✅ High-confidence wind data: {wind_data['speed_ms']:.1f} m/s from "
-                f"{wind_data['direction_cardinal']} ({wind_data['direction_deg']}°). "
-                f"Time diff: {wind_data['time_difference_minutes']:.1f} min, "
-                f"Confidence: {wind_data['confidence']}%, Source: {wind_data['source']}"
-            )
-        elif wind_data.get('confidence', 0) >= 50:
+        # Log wind data confidence for monitoring
+        if wind_data.get('confidence', 0) < 50:
             logger.warning(
-                f"⚠️ Moderate-confidence wind data: {wind_data['speed_ms']:.1f} m/s from "
-                f"{wind_data['direction_cardinal']}. Time diff: {wind_data['time_difference_minutes']:.1f} min, "
-                f"Confidence: {wind_data['confidence']}%, Source: {wind_data['source']}"
-            )
-        else:
-            logger.error(
-                f"❌ Low-confidence wind data: Time diff: {wind_data['time_difference_minutes']:.1f} min, "
-                f"Confidence: {wind_data['confidence']}%. Factory attribution unreliable!"
+                f"Low-confidence wind data for {city}: {wind_data.get('confidence', 0)}% "
+                f"(Time diff: {wind_data.get('time_difference_minutes', 0):.0f} min)"
             )
 
         # Convert to format expected by the rest of the system
@@ -507,18 +445,7 @@ class SatelliteDataFetcher:
 
         for window_hours in search_windows:
             start_time = target_time - timedelta(hours=window_hours)
-            end_time = target_time + timedelta(
-                hours=min(window_hours, forward_hours)
-            )
-
-            logger.info(
-                "Attempting wind source %s for %s (window -%dh/+%dh from %s)",
-                label,
-                city,
-                window_hours,
-                min(window_hours, forward_hours),
-                target_time.strftime('%Y-%m-%d %H:%M UTC')
-            )
+            end_time = target_time + timedelta(hours=min(window_hours, forward_hours))
 
             collection = (
                 ee.ImageCollection(dataset)
@@ -531,14 +458,6 @@ class SatelliteDataFetcher:
             )
 
             count = collection.size().getInfo()
-            logger.info(
-                "%s for %s: found %d images in window [%s to %s]",
-                label,
-                city,
-                count,
-                start_time.strftime('%Y-%m-%d %H:%M'),
-                end_time.strftime('%Y-%m-%d %H:%M')
-            )
             if count == 0:
                 continue
 
@@ -563,12 +482,6 @@ class SatelliteDataFetcher:
             ) / 3600
 
             if time_offset_hours > max_offset_hours:
-                logger.debug(
-                    "Discarding %s sample Δt=%.2fh (>%.2fh)",
-                    label,
-                    time_offset_hours,
-                    max_offset_hours
-                )
                 continue
 
             sample_data = closest_image.reduceRegion(
@@ -596,18 +509,7 @@ class SatelliteDataFetcher:
                 base_reliability=base_reliability
             )
 
-            logger.info(
-                "Wind data retrieved (%s): %.1f m/s from %.0f° (Δt=%.2fh, confidence=%.0f%%)",
-                label,
-                speed,
-                direction,
-                time_offset_hours,
-                confidence
-            )
-
-            ksa_time = wind_timestamp_utc.astimezone(
-                pytz.timezone(config.TIMEZONE)
-            )
+            ksa_time = wind_timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
 
             return {
                 'success': True,
@@ -739,15 +641,6 @@ class SatelliteDataFetcher:
                 confidence = 70.0
             else:
                 confidence = 50.0
-            
-            logger.info(
-                "OpenWeatherMap wind for %s: %.1f m/s from %.0f° (Δt=%.2fh, confidence=%.0f%%)",
-                city,
-                wind_speed_ms,
-                wind_deg,
-                time_offset_hours,
-                confidence
-            )
             
             return {
                 'success': True,

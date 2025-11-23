@@ -670,7 +670,8 @@ def main():
     if not st.session_state.pollution_data:
         with st.spinner(f"Fetching pollution data for {city}..."):
             st.session_state.pollution_data = fetch_pollution_data(city, days_back)
-            st.session_state.last_update = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            ksa_tz = pytz.timezone(config.TIMEZONE)
+            st.session_state.last_update = datetime.now(ksa_tz).strftime("%Y-%m-%d %H:%M:%S KSA")
 
     pollution_data = st.session_state.pollution_data
 
