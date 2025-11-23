@@ -18,6 +18,14 @@ import json
 from satellite_fetcher import SatelliteDataFetcher
 from analyzer import PollutionAnalyzer
 from visualizer import MapVisualizer
+from data_validator import DataValidator
+from dashboard_components import (
+    create_aqi_dashboard,
+    create_health_risk_panel,
+    create_data_quality_panel,
+    create_insights_panel,
+    create_historical_comparison
+)
 import config
 
 # Page configuration
@@ -73,10 +81,14 @@ if 'selected_city' not in st.session_state:
     st.session_state.selected_city = 'Yanbu'
 if 'auto_refresh' not in st.session_state:
     st.session_state.auto_refresh = False
+if 'refresh_interval' not in st.session_state:
+    st.session_state.refresh_interval = 6  # Default 6 hours
 if 'last_update' not in st.session_state:
     st.session_state.last_update = None
 if 'pollution_data' not in st.session_state:
     st.session_state.pollution_data = {}
+if 'alert_thresholds' not in st.session_state:
+    st.session_state.alert_thresholds = {}
 
 @st.cache_resource
 def initialize_services():
@@ -93,8 +105,9 @@ def initialize_services():
             vertex_location=vertex_location
         )
         visualizer = MapVisualizer()
+        validator = DataValidator()
 
-        return fetcher, analyzer, visualizer
+        return fetcher, analyzer, visualizer, validator
     except Exception as e:
         st.error(f"Failed to initialize services: {str(e)}")
         st.stop()
@@ -135,13 +148,37 @@ def create_sidebar():
             help="Number of days to analyze"
         )
 
-        st.session_state.auto_refresh = st.toggle(
-            "Auto-refresh (30 min)",
-            value=st.session_state.auto_refresh,
-            help="Automatically update data every 30 minutes"
-        )
+        # Auto-refresh settings
+        st.subheader("🔄 Refresh Settings")
 
-        if st.button("🔄 Refresh Data", use_container_width=True, type="primary"):
+        refresh_enabled = st.toggle(
+            "Enable Auto-refresh",
+            value=st.session_state.get('auto_refresh', False),
+            help="Automatically update data at specified interval"
+        )
+        st.session_state.auto_refresh = refresh_enabled
+
+        if refresh_enabled:
+            refresh_hours = st.select_slider(
+                "Refresh Interval",
+                options=[0.5, 1, 2, 3, 4, 6, 8, 12, 24],
+                value=st.session_state.get('refresh_interval', 6),
+                format_func=lambda x: f"{x} hours" if x >= 1 else f"{int(x*60)} minutes",
+                help="How often to refresh the data"
+            )
+            st.session_state.refresh_interval = refresh_hours
+
+            # Show next refresh time
+            if st.session_state.last_update:
+                from datetime import datetime, timedelta
+                import pytz
+                last_update_dt = datetime.strptime(st.session_state.last_update, "%Y-%m-%d %H:%M:%S")
+                ksa_tz = pytz.timezone(config.TIMEZONE)
+                last_update_ksa = ksa_tz.localize(last_update_dt)
+                next_refresh = last_update_ksa + timedelta(hours=refresh_hours)
+                st.caption(f"Next refresh: {next_refresh.strftime('%H:%M:%S KSA')}")
+
+        if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
             st.session_state.pollution_data = {}
             st.rerun()
 
@@ -168,7 +205,7 @@ def create_sidebar():
 @st.cache_data(ttl=1800)
 def fetch_pollution_data(city: str, days_back: int):
     """Fetch pollution data"""
-    fetcher, analyzer, _ = initialize_services()
+    fetcher, analyzer, _, _ = initialize_services()
     all_data = {}
 
     progress = st.progress(0)
@@ -241,7 +278,7 @@ def display_violations(pollution_data: Dict, city: str):
     """Display violations with AI analysis"""
     st.subheader("⚠️ Violation Analysis")
 
-    fetcher, analyzer, visualizer = initialize_services()
+    fetcher, analyzer, visualizer, validator = initialize_services()
     violations = []
 
     for gas, data in pollution_data.items():
@@ -347,15 +384,19 @@ def display_map(pollution_data: Dict, city: str):
     from streamlit_folium import st_folium
 
     # Initialize visualizer
-    fetcher, analyzer, visualizer = initialize_services()
+    fetcher, analyzer, visualizer, validator = initialize_services()
 
-    # Get available gases
+    # Get ALL gases that have successful data (with or without pixels)
     available_gases = [gas for gas, data in pollution_data.items()
-                      if data.get('success') and data.get('pixels')]
+                      if data.get('success')]
 
     if not available_gases:
         st.warning("No pollution data available to display on the map")
         return
+
+    # Also check for gases with pixel data for heatmap
+    gases_with_pixels = [gas for gas in available_gases
+                        if pollution_data[gas].get('pixels')]
 
     # Find gas with violation (if any)
     violation_gas = None
@@ -376,28 +417,74 @@ def display_map(pollution_data: Dict, city: str):
         "Select Gas to Display:",
         available_gases,
         index=default_index,
-        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''}"
+        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''} {'📊' if x in gases_with_pixels else '📈 Stats Only'}"
     )
 
     if selected_gas:
         gas_data = pollution_data[selected_gas]
 
-        # Display gas info and wind data
-        col1, col2, col3 = st.columns(3)
+        # Display comprehensive data info
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric(f"{selected_gas} Max Value",
-                     f"{gas_data['statistics']['max']:.2f} {gas_data['unit']}")
+            st.metric(f"{selected_gas} Max",
+                     f"{gas_data['statistics']['max']:.2f}",
+                     f"{gas_data['unit']}")
         with col2:
+            st.metric(f"{selected_gas} Mean",
+                     f"{gas_data['statistics']['mean']:.2f}",
+                     f"Min: {gas_data['statistics']['min']:.2f}")
+        with col3:
             if gas_data.get('wind', {}).get('success'):
                 wind = gas_data['wind']
                 st.metric("Wind",
-                         f"{wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']}")
+                         f"{wind['speed_ms']:.1f} m/s",
+                         f"From {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
             else:
-                st.metric("Wind", "No data")
-        with col3:
-            st.metric("Data Time (KSA)",
-                     gas_data.get('timestamp_ksa', 'N/A').strftime("%Y-%m-%d %H:%M")
-                     if hasattr(gas_data.get('timestamp_ksa'), 'strftime') else gas_data.get('timestamp_ksa', 'N/A'))
+                st.metric("Wind", "No data", "—")
+        with col4:
+            # Show pixel count if available
+            pixel_count = gas_data.get('statistics', {}).get('pixel_count', 0)
+            st.metric("Data Points",
+                     pixel_count,
+                     "pixels" if pixel_count > 0 else "No spatial data")
+
+        # Show detailed timing information
+        with st.expander("🕐 Detailed Timing Information (All times in KSA)", expanded=True):
+            col1, col2, col3 = st.columns(3)
+
+            # Satellite observation time
+            with col1:
+                sat_time_ksa = gas_data.get('timestamp_ksa', 'N/A')
+                if hasattr(sat_time_ksa, 'strftime'):
+                    st.info(f"**🛰️ Satellite Pass:**\n{sat_time_ksa.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+                else:
+                    st.info(f"**🛰️ Satellite Pass:**\n{sat_time_ksa}")
+
+            # Wind observation time
+            with col2:
+                if gas_data.get('wind', {}).get('timestamp_ksa'):
+                    wind_time = gas_data['wind']['timestamp_ksa']
+                    if hasattr(wind_time, 'strftime'):
+                        st.info(f"**💨 Wind Reading:**\n{wind_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+                    else:
+                        st.info(f"**💨 Wind Reading:**\n{wind_time}")
+                else:
+                    st.info("**💨 Wind Reading:**\nNo wind data")
+
+            # Time synchronization info
+            with col3:
+                if gas_data.get('wind', {}).get('time_difference_minutes') is not None:
+                    time_diff = gas_data['wind']['time_difference_minutes']
+                    confidence = gas_data['wind'].get('confidence', 0)
+                    if time_diff < 30:
+                        quality = "🟢 Excellent"
+                    elif time_diff < 60:
+                        quality = "🟡 Good"
+                    else:
+                        quality = "🔴 Poor"
+                    st.info(f"**⏱️ Sync Quality:**\n{quality}\nΔt: {time_diff:.0f} min\nConfidence: {confidence:.0f}%")
+                else:
+                    st.info("**⏱️ Sync Quality:**\nNo sync data")
 
         # Find hotspot
         hotspot = analyzer.find_hotspot(gas_data)
@@ -477,10 +564,19 @@ def main():
 
     # Auto-refresh logic
     if st.session_state.auto_refresh:
-        st.write("Auto-refresh enabled - Updates every 30 minutes")
+        refresh_interval = st.session_state.get('refresh_interval', 6)
+        interval_text = f"{refresh_interval} hours" if refresh_interval >= 1 else f"{int(refresh_interval*60)} minutes"
+        st.info(f"🔄 Auto-refresh enabled - Updates every {interval_text}")
 
-    # Main content
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Overview", "🗺️ Map View", "📈 Trends", "⚠️ Violations"])
+    # Main content with enhanced tabs
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+        "📊 Overview",
+        "🌡️ AQI Dashboard",
+        "🗺️ Map View",
+        "📈 Analysis",
+        "⚠️ Violations",
+        "💡 Insights"
+    ])
 
     # Fetch data
     if not st.session_state.pollution_data:
@@ -522,20 +618,71 @@ def main():
                 st.metric("Data Quality", "No Data")
 
     with tab2:
-        st.header(f"Pollution Map - {city}")
-        display_map(pollution_data, city)
+        st.header("🌡️ Air Quality Index Dashboard")
+        # Initialize validator
+        _, _, _, validator = initialize_services()
+
+        # AQI Dashboard
+        create_aqi_dashboard(pollution_data, validator)
+        st.divider()
+
+        # Health Risk Panel
+        create_health_risk_panel(pollution_data, validator)
+        st.divider()
+
+        # Data Quality Panel
+        create_data_quality_panel(pollution_data, validator)
 
     with tab3:
-        st.header("Historical Trends")
-        display_trends(pollution_data)
+        st.header(f"🗺️ Pollution Map - {city}")
+        display_map(pollution_data, city)
 
     with tab4:
-        st.header("Violation Details")
+        st.header("📈 Detailed Analysis")
+
+        # Historical comparison
+        create_historical_comparison(pollution_data)
+
+        st.divider()
+
+        # Original trends
+        display_trends(pollution_data)
+
+    with tab5:
+        st.header("⚠️ Violation Details")
         display_violations(pollution_data, city)
 
-    # Footer
+    with tab6:
+        st.header("💡 Intelligent Insights & Predictions")
+        _, _, _, validator = initialize_services()
+
+        # Insights panel
+        create_insights_panel(pollution_data, city, validator)
+
+        # Additional analytics
+        with st.expander("🔬 Advanced Analytics"):
+            st.subheader("Data Validation Report")
+            for gas, data in pollution_data.items():
+                if data.get('success'):
+                    validation = validator.validate_measurement(gas, data['statistics']['max'], data['unit'])
+                    if validation['warnings'] or validation['errors']:
+                        st.write(f"**{gas}:**")
+                        for warning in validation['warnings']:
+                            st.warning(f"⚠️ {warning}")
+                        for error in validation['errors']:
+                            st.error(f"❌ {error}")
+
+    # Footer with enhanced information
     st.divider()
-    st.caption("Data source: ESA Sentinel-5P | Guidelines: WHO 2021 | Last satellite pass: Check timestamp above")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.caption("**Data Source:** ESA Sentinel-5P TROPOMI")
+    with col2:
+        st.caption("**Standards:** WHO 2021 Guidelines")
+    with col3:
+        ksa_tz = pytz.timezone(config.TIMEZONE)
+        current_time = datetime.now(ksa_tz)
+        st.caption(f"**System Time:** {current_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
 
 if __name__ == "__main__":
     main()
