@@ -296,37 +296,53 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No valid measurements (possible cloud cover)")
             
-            # Convert statistics to display units and fix negative values
-            # Note: Negative values are sensor noise (physically impossible)
+            # Convert statistics to display units with ESA/NASA outlier filtering
+            # Per official Sentinel-5P documentation:
+            # "Negative values, often found in clean regions, are present but should not be filtered
+            #  except for outliers, i.e. for vertical columns lower than -0.001 mol/m²"
+            # Source: https://developers.google.com/earth-engine/datasets/catalog/COPERNICUS_S5P_NRTI_L3_NO2
+
+            OUTLIER_THRESHOLD_MOL_M2 = -0.001  # ESA/NASA recommended threshold
+
             if mean_val is not None:
-                molecules_cm2 = mean_val * 6.02214e19
-                if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
-                    mean_val = molecules_cm2 / 1e15
-                elif gas == 'CO':
-                    mean_val = molecules_cm2 / 1e18
-                elif gas == 'CH4':
-                    mean_val = mean_val
-                mean_val = max(0.0, mean_val)  # Clamp to zero (no negative pollution)
+                # Check for outlier BEFORE conversion
+                if mean_val < OUTLIER_THRESHOLD_MOL_M2:
+                    logger.warning(f"{gas} mean outlier detected: {mean_val:.6f} mol/m² (< {OUTLIER_THRESHOLD_MOL_M2})")
+                    mean_val = 0.0  # Set outliers to zero
+                else:
+                    molecules_cm2 = mean_val * 6.02214e19
+                    if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
+                        mean_val = molecules_cm2 / 1e15
+                    elif gas == 'CO':
+                        mean_val = molecules_cm2 / 1e18
+                    elif gas == 'CH4':
+                        mean_val = mean_val
 
             if max_val is not None:
-                molecules_cm2 = max_val * 6.02214e19
-                if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
-                    max_val = molecules_cm2 / 1e15
-                elif gas == 'CO':
-                    max_val = molecules_cm2 / 1e18
-                elif gas == 'CH4':
-                    max_val = max_val
-                max_val = max(0.0, max_val)  # Clamp to zero
+                if max_val < OUTLIER_THRESHOLD_MOL_M2:
+                    logger.warning(f"{gas} max outlier detected: {max_val:.6f} mol/m²")
+                    max_val = 0.0
+                else:
+                    molecules_cm2 = max_val * 6.02214e19
+                    if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
+                        max_val = molecules_cm2 / 1e15
+                    elif gas == 'CO':
+                        max_val = molecules_cm2 / 1e18
+                    elif gas == 'CH4':
+                        max_val = max_val
 
             if min_val is not None:
-                molecules_cm2 = min_val * 6.02214e19
-                if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
-                    min_val = molecules_cm2 / 1e15
-                elif gas == 'CO':
-                    min_val = molecules_cm2 / 1e18
-                elif gas == 'CH4':
-                    min_val = min_val
-                min_val = max(0.0, min_val)  # Clamp to zero (negative = sensor noise)
+                if min_val < OUTLIER_THRESHOLD_MOL_M2:
+                    logger.warning(f"{gas} min outlier detected: {min_val:.6f} mol/m²")
+                    min_val = 0.0
+                else:
+                    molecules_cm2 = min_val * 6.02214e19
+                    if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
+                        min_val = molecules_cm2 / 1e15
+                    elif gas == 'CO':
+                        min_val = molecules_cm2 / 1e18
+                    elif gas == 'CH4':
+                        min_val = min_val
 
 
 
