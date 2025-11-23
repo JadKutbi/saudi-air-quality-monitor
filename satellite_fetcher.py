@@ -192,7 +192,10 @@ class SatelliteDataFetcher:
                     min_val = min_val
 
 
-            
+
+            # Fetch wind data synchronized with satellite timestamp
+            wind_data = self.fetch_wind_data(city, timestamp_utc)
+
             return {
                 'success': True,
                 'city': city,
@@ -207,7 +210,8 @@ class SatelliteDataFetcher:
                     'pixel_count': len(pixels)
                 },
                 'unit': gas_config['display_unit'],
-                'bbox': bbox
+                'bbox': bbox,
+                'wind': wind_data  # Include wind data
             }
             
         except Exception as e:

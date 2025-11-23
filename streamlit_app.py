@@ -291,11 +291,46 @@ def display_violations(pollution_data: Dict, city: str):
                     st.write(f"**Threshold:** {violation['threshold']:.1f} {violation['unit']}")
                     st.write(f"**Exceeded by:** {violation['percentage_over']:.1f}%")
 
+                    # Add wind information
+                    if violation['wind'].get('success'):
+                        st.write(f"**Wind:** {violation['wind']['speed_ms']:.1f} m/s from {violation['wind']['direction_cardinal']} ({violation['wind']['direction_deg']:.0f}°)")
+                        st.write(f"**Wind Confidence:** {violation['wind']['confidence']:.0f}%")
+
+                    # Display hotspot location
+                    if violation.get('hotspot'):
+                        st.write(f"**Hotspot Location:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
+
                 with col2:
                     # AI Analysis
-                    with st.spinner("Analyzing source..."):
+                    st.write("**🤖 AI Source Analysis:**")
+                    with st.spinner("Analyzing pollution source..."):
                         analysis = analyzer.ai_analysis(violation)
-                    st.info(analysis[:300] + "..." if len(analysis) > 300 else analysis)
+
+                    # Display full analysis in an expandable section
+                    if len(analysis) > 300:
+                        st.info(analysis[:300] + "...")
+                        with st.expander("View Full Analysis"):
+                            st.write(analysis)
+                    else:
+                        st.info(analysis)
+
+                # Add factory list if available
+                if violation.get('nearby_factories'):
+                    with st.expander(f"📍 Nearby Industrial Facilities ({len(violation['nearby_factories'])} found)"):
+                        for factory in violation['nearby_factories'][:5]:
+                            col1, col2, col3 = st.columns([2, 1, 1])
+                            with col1:
+                                st.write(f"**{factory['name']}**")
+                                st.write(f"Type: {factory['type']}")
+                            with col2:
+                                st.write(f"Distance: {factory['distance_km']:.1f} km")
+                                if factory.get('likely_upwind'):
+                                    st.write("⚠️ **UPWIND**")
+                            with col3:
+                                st.write(f"Confidence: {factory.get('confidence', 0):.0f}%")
+                                st.write(f"Emissions: {', '.join(factory['emissions'][:2])}")
+
+                st.divider()
     else:
         st.success("✅ No violations detected - Air quality is within safe limits")
 
@@ -341,6 +376,23 @@ def display_map(pollution_data: Dict, city: str):
 
     if selected_gas:
         gas_data = pollution_data[selected_gas]
+
+        # Display gas info and wind data
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric(f"{selected_gas} Max Value",
+                     f"{gas_data['statistics']['max']:.2f} {gas_data['unit']}")
+        with col2:
+            if gas_data.get('wind', {}).get('success'):
+                wind = gas_data['wind']
+                st.metric("Wind",
+                         f"{wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']}")
+            else:
+                st.metric("Wind", "No data")
+        with col3:
+            st.metric("Data Time (KSA)",
+                     gas_data.get('timestamp_ksa', 'N/A').strftime("%Y-%m-%d %H:%M")
+                     if hasattr(gas_data.get('timestamp_ksa'), 'strftime') else gas_data.get('timestamp_ksa', 'N/A'))
 
         # Find hotspot
         hotspot = analyzer.find_hotspot(gas_data)
