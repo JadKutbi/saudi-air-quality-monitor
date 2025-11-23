@@ -23,11 +23,25 @@ class SatelliteDataFetcher:
     def __init__(self):
         """Initialize Google Earth Engine and Enhanced Wind Fetcher"""
         try:
-            ee.Initialize(project=config.GEE_PROJECT)
-            logger.info("Google Earth Engine initialized successfully")
+            # Try to get service account from Streamlit secrets first
+            import streamlit as st
+            if hasattr(st, 'secrets') and 'GEE_SERVICE_ACCOUNT' in st.secrets:
+                # Use service account from secrets
+                service_account = st.secrets['GEE_SERVICE_ACCOUNT']
+                credentials = ee.ServiceAccountCredentials(
+                    service_account,
+                    key_data=st.secrets['GEE_PRIVATE_KEY']
+                )
+                ee.Initialize(credentials, project=config.GEE_PROJECT)
+                logger.info("Google Earth Engine initialized with service account")
+            else:
+                # Fallback to default authentication (for local development)
+                ee.Initialize(project=config.GEE_PROJECT)
+                logger.info("Google Earth Engine initialized with default auth")
         except Exception as e:
             logger.error(f"Failed to initialize GEE: {e}")
-            logger.info("Run: earthengine authenticate")
+            logger.info("For Streamlit Cloud: Add GEE_SERVICE_ACCOUNT and GEE_PRIVATE_KEY to secrets")
+            logger.info("For local: Run 'earthengine authenticate'")
             raise
 
         # Initialize enhanced wind fetcher with all API sources
