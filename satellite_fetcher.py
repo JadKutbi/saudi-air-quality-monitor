@@ -141,16 +141,34 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # CRITICAL: ALWAYS use the SINGLE most recent observation only
-            # The days_back parameter only controls how far to SEARCH if no recent data exists
-            # It should NOT blend multiple days together (that would give inconsistent results)
-            image = collection.sort('system:time_start', False).first()
+            # SOLUTION: Use FIXED median of 3 most recent images for consistent values + cloud coverage
+            # - This ensures VALUES are consistent (always same 3 images if available)
+            # - Provides better cloud coverage than single image
+            # - Still represents latest data (most recent 3 passes)
+            # - days_back only affects which images are AVAILABLE to choose from
 
-            # Verify the image is valid
-            info = image.getInfo()
+            # Get the most recent image for timestamp reporting
+            most_recent = collection.sort('system:time_start', False).first()
+            info = most_recent.getInfo()
+
             if info is None:
                 logger.warning(f"No recent {gas} data available for {city}")
                 return self._create_empty_response(city, gas)
+
+            # Create median composite from up to 3 most recent images (FIXED COUNT)
+            # This gives consistent results while filling cloud gaps
+            if collection_count >= 3:
+                # Use exactly 3 most recent images
+                image = collection.sort('system:time_start', False).limit(3).median()
+                logger.info(f"Using median of 3 most recent images for {gas}")
+            elif collection_count == 2:
+                # Use both images
+                image = collection.sort('system:time_start', False).limit(2).median()
+                logger.info(f"Using median of 2 most recent images for {gas}")
+            else:
+                # Single image - use as-is
+                image = most_recent
+                logger.info(f"Using single most recent image for {gas}")
             
             # Record when the satellite captured this data
             timestamp_ms = info['properties']['system:time_start']

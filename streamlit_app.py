@@ -169,7 +169,7 @@ def create_sidebar():
             min_value=1,
             max_value=14,
             value=3,
-            help="How far back to search for satellite data. Note: Always displays the MOST RECENT observation found, not an average."
+            help="How far back to search for satellite data. System uses median of 3 most recent observations for cloud coverage. Set higher if recent data is sparse."
         )
 
         # Auto-refresh settings
