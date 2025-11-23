@@ -211,55 +211,79 @@ class SatelliteDataFetcher:
             lat_lon = ee.Image.pixelLonLat()
             combined = band_data.addBands(lat_lon)
             
-            # Sample the region
-            samples = combined.sample(
-                region=aoi,
-                scale=1000,
-                geometries=True
-            )
-            
-            # Convert to list
-            sample_list = samples.toList(samples.size()).getInfo()
-            
-            # Extract pixel data
-            pixels = []
-            for sample in sample_list:
-                props = sample['properties']
-                if gas_config["band"] in props and props[gas_config["band"]] is not None:
-                    # Get raw value in mol/m²
-                    raw_value = props[gas_config["band"]]
-                    
-                    # Convert mol/m² to molecules/cm² then to display units
-                    # Multiply by Avogadro's number divided by 10000 (m² to cm² conversion)
-                    molecules_per_cm2 = raw_value * 6.02214e19  # mol/m² to molecules/cm²
-                    
-                    # Scale to display units
-                    if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
-                        value = molecules_per_cm2 / 1e15  # Display as 10^15 molecules/cm²
-                    elif gas == 'CO':
-                        value = molecules_per_cm2 / 1e18  # Display as 10^18 molecules/cm²
-                    elif gas == 'CH4':
-                        value = raw_value  # Already in ppb
+            # Sample the region with fallback scales
+            # Try different scales to get samples
+            scales = [1000, 2000, 5000, 10000]  # Try progressively coarser scales
+            sample_count = 0
+            samples = None
+
+            for scale in scales:
+                try:
+                    samples = combined.sample(
+                        region=aoi,
+                        scale=scale,
+                        geometries=True,
+                        numPixels=500  # Limit number of pixels for performance
+                    )
+                    sample_count = samples.size().getInfo()
+                    if sample_count > 0:
+                        logger.info(f"Sample count for {gas} at scale {scale}m: {sample_count}")
+                        break
                     else:
-                        value = molecules_per_cm2 / 1e15
-                    
-                    pixels.append({
-                        'lat': props['latitude'],
-                        'lon': props['longitude'],
-                        'value': value
-                    })
+                        logger.debug(f"No samples at scale {scale}m, trying coarser scale")
+                except Exception as e:
+                    logger.debug(f"Sampling failed at scale {scale}m: {e}")
+                    continue
+
+            pixels = []
+            if sample_count > 0:
+                # Convert to list only if we have samples
+                sample_list = samples.toList(sample_count).getInfo()
+
+                # Extract pixel data
+                for sample in sample_list:
+                    props = sample['properties']
+                    if gas_config["band"] in props and props[gas_config["band"]] is not None:
+                        # Get raw value in mol/m²
+                        raw_value = props[gas_config["band"]]
+
+                        # Convert mol/m² to molecules/cm² then to display units
+                        # Multiply by Avogadro's number divided by 10000 (m² to cm² conversion)
+                        molecules_per_cm2 = raw_value * 6.02214e19  # mol/m² to molecules/cm²
+
+                        # Scale to display units
+                        if gas in ['NO2', 'SO2', 'O3', 'HCHO']:
+                            value = molecules_per_cm2 / 1e15  # Display as 10^15 molecules/cm²
+                        elif gas == 'CO':
+                            value = molecules_per_cm2 / 1e18  # Display as 10^18 molecules/cm²
+                        elif gas == 'CH4':
+                            value = raw_value  # Already in ppb
+                        else:
+                            value = molecules_per_cm2 / 1e15
+
+                        pixels.append({
+                            'lat': props['latitude'],
+                            'lon': props['longitude'],
+                            'value': value
+                        })
 
             
             logger.info(f"Retrieved {len(pixels)} valid pixels for {gas} in {city}")
-            
+
             # Convert stats - handle None values
             mean_val = stats.get(gas_config["band"] + '_mean')
             max_val = stats.get(gas_config["band"] + '_max')
             min_val = stats.get(gas_config["band"] + '_min')
             count_val = stats.get(gas_config["band"] + '_count', 0)
 
-            # Check if we have valid data
-            if mean_val is None and max_val is None:
+            # If we have no pixels but have statistics, that's still valid data
+            # (happens when data exists but sampling fails)
+            if len(pixels) == 0 and (mean_val is not None or max_val is not None):
+                logger.info(f"No pixel samples but statistics available for {gas}")
+                # We'll proceed with just statistics
+
+            # Check if we have valid data (either pixels or statistics)
+            if mean_val is None and max_val is None and len(pixels) == 0:
                 logger.warning(f"No valid pixels for {gas} in {city} after quality filtering")
                 # Try without quality filtering
                 logger.info(f"Retrying without quality filter for {gas}")
@@ -321,25 +345,40 @@ class SatelliteDataFetcher:
 
 
             # Fetch wind data synchronized with satellite timestamp
-            wind_data = self.fetch_wind_data(city, timestamp_utc)
+            wind_data = {}
+            if self.enhanced_wind_fetcher:
+                try:
+                    wind_data = self.fetch_wind_data(city, timestamp_utc)
+                except Exception as e:
+                    logger.warning(f"Could not fetch wind data: {e}")
+                    wind_data = {'success': False, 'error': str(e)}
 
-            return {
-                'success': True,
-                'city': city,
-                'gas': gas,
-                'timestamp_utc': timestamp_utc,
-                'timestamp_ksa': timestamp_ksa,
-                'pixels': pixels,
-                'statistics': {
-                    'mean': mean_val,
-                    'max': max_val,
-                    'min': min_val,
-                    'pixel_count': len(pixels)
-                },
-                'unit': gas_config['display_unit'],
-                'bbox': bbox,
-                'wind': wind_data  # Include wind data
-            }
+            # Determine success based on having either pixels or statistics
+            has_valid_data = (mean_val is not None or max_val is not None or len(pixels) > 0)
+
+            if has_valid_data:
+                return {
+                    'success': True,
+                    'city': city,
+                    'gas': gas,
+                    'timestamp_utc': timestamp_utc,
+                    'timestamp_ksa': timestamp_ksa,
+                    'pixels': pixels,
+                    'statistics': {
+                        'mean': mean_val if mean_val is not None else 0,
+                        'max': max_val if max_val is not None else 0,
+                        'min': min_val if min_val is not None else 0,
+                        'pixel_count': len(pixels)
+                    },
+                    'unit': gas_config['display_unit'],
+                    'bbox': bbox,
+                    'wind': wind_data,
+                    'data_quality': 'statistics_only' if len(pixels) == 0 else 'full'
+                }
+            else:
+                logger.error(f"No valid data found for {gas} in {city}")
+                return self._create_empty_response(city, gas,
+                    error="No valid data after all attempts")
             
         except Exception as e:
             logger.error(f"Error fetching {gas} data for {city}: {e}")

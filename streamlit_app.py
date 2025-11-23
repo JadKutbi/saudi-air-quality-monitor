@@ -166,10 +166,10 @@ def create_sidebar():
 
         days_back = st.slider(
             "Historical Data (days)",
-            min_value=3,
+            min_value=1,
             max_value=14,
-            value=7,
-            help="Number of days to search for satellite data (Sentinel-5P has ~1-2 day revisit time)"
+            value=3,
+            help="Number of days to search for satellite data (Auto-extends if no data found)"
         )
 
         # Auto-refresh settings
