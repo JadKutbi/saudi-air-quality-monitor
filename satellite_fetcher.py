@@ -141,52 +141,80 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # COMPROMISE: Use median of images from SAME DAY ONLY
+            # IMPROVED FALLBACK STRATEGY: Search day by day for valid data
             #
-            # Problem with single image: Too much cloud cover → no data
-            # Problem with multi-day median: Wind changes daily → wrong attribution
+            # Strategy:
+            # 1. Try most recent day first (use median of all passes from that day)
+            # 2. If cloud cover prevents measurements, try previous day
+            # 3. Keep searching back up to 14 days to find latest valid data
+            # 4. Wind data will match the specific day of measurement
             #
-            # SOLUTION: Use median of all passes from the most recent day
-            # - Sentinel-5P passes over each location 1-2 times per day
-            # - Wind conditions are similar throughout same day
-            # - Median fills cloud gaps from multiple passes
-            # - Attribution remains accurate (same day wind)
+            # This ensures we always get the most recent AVAILABLE data per gas
 
-            # Get the most recent image to find its date
-            most_recent = collection.sort('system:time_start', False).first()
-            info = most_recent.getInfo()
+            image = None
+            timestamp_utc = None
+            day_start = None
+            same_day_count = 0
+            max_days_to_search = 14
 
-            if info is None:
-                logger.warning(f"No recent {gas} data available for {city}")
-                return self._create_empty_response(city, gas)
+            # Sort collection by date (newest first)
+            sorted_collection = collection.sort('system:time_start', False)
 
-            # Get the date of the most recent observation
-            timestamp_ms = info['properties']['system:time_start']
-            timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+            # Try each day going backwards
+            for days_ago in range(max_days_to_search):
+                search_end = end_date - timedelta(days=days_ago)
+                search_start = search_end - timedelta(days=1)
 
-            # Filter to only images from that same day
-            day_start = timestamp_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
+                day_collection = sorted_collection.filterDate(
+                    search_start.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    search_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+                )
 
-            same_day_collection = collection.filterDate(
-                day_start.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                day_end.strftime('%Y-%m-%dT%H:%M:%SZ')
-            )
+                day_count = day_collection.size().getInfo()
 
-            same_day_count = same_day_collection.size().getInfo()
-            logger.info(f"Found {same_day_count} images from {day_start.date()} for {gas}")
+                if day_count == 0:
+                    continue
 
-            # Use median of all images from that day (fills cloud gaps)
-            if same_day_count > 1:
-                image = same_day_collection.median()
-                logger.info(f"Using median of {same_day_count} observations from same day")
-            else:
-                image = most_recent
-                logger.info(f"Using single observation from {day_start.date()}")
-            
-            # Record when the satellite captured this data
-            timestamp_ms = info['properties']['system:time_start']
-            timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+                # Get first image from this day to test if it has valid data
+                test_image = day_collection.first()
+                test_info = test_image.getInfo()
+
+                if test_info is None:
+                    continue
+
+                # Try to get a quick measurement to see if data is valid
+                if day_count > 1:
+                    test_image = day_collection.median()
+
+                band_data = test_image.select(gas_config["band"])
+                quick_stats = band_data.reduceRegion(
+                    reducer=ee.Reducer.mean(),
+                    geometry=aoi,
+                    scale=5000,  # Coarse scale for quick test
+                    maxPixels=1e9,
+                    bestEffort=True
+                ).getInfo()
+
+                test_mean = quick_stats.get(gas_config["band"] + '_mean')
+
+                # If we found valid data, use this day
+                if test_mean is not None:
+                    image = test_image
+                    same_day_count = day_count
+                    timestamp_ms = test_info['properties']['system:time_start']
+                    timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+                    day_start = timestamp_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+
+                    logger.info(f"Found valid {gas} data from {day_start.date()} ({days_ago} days ago) - {same_day_count} observations")
+                    break
+
+            # If no valid data found in any day
+            if image is None:
+                logger.warning(f"No valid {gas} data found for {city} in past {max_days_to_search} days (all days had cloud cover)")
+                return self._create_empty_response(city, gas,
+                    error=f"No valid measurements in past {max_days_to_search} days (cloud cover)")
+
+            # Record when the satellite captured this data (already set in loop above)
             timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
 
             # Extract the pollution measurements
@@ -348,12 +376,17 @@ class SatelliteDataFetcher:
             has_valid_data = (mean_val is not None or max_val is not None or len(pixels) > 0)
 
             if has_valid_data:
+                # Calculate how many days ago this data is from
+                days_old = (datetime.now(pytz.UTC) - timestamp_utc).days
+
                 return {
                     'success': True,
                     'city': city,
                     'gas': gas,
                     'timestamp_utc': timestamp_utc,
                     'timestamp_ksa': timestamp_ksa,
+                    'days_old': days_old,
+                    'data_age_label': f"{days_old} day{'s' if days_old != 1 else ''} ago" if days_old > 0 else "today",
                     'pixels': pixels,
                     'statistics': {
                         'mean': mean_val if mean_val is not None else 0,

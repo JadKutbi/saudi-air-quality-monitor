@@ -367,6 +367,12 @@ def display_metrics(pollution_data: Dict):
                 st.write(f"**Mean:** {data['statistics']['mean']:.2f}")
                 st.write(f"**Min:** {data['statistics']['min']:.2f}")
                 st.write(f"**Unit:** {data['unit']}")
+
+                # Show data age if available
+                if data.get('data_age_label'):
+                    age_emoji = "🕐" if data.get('days_old', 0) > 0 else "✨"
+                    st.caption(f"{age_emoji} Data from: {data.get('data_age_label')}")
+
                 if max_val >= threshold:
                     exceeded = ((max_val - threshold) / threshold * 100)
                     st.error(f"Exceeded by {exceeded:.1f}%")
@@ -882,6 +888,18 @@ def main():
 
     with tab1:
         st.header(f"Air Quality Overview - {city}")
+
+        # Check if we have data from different days
+        data_ages = set()
+        for gas, data in pollution_data.items():
+            if data.get('success') and data.get('days_old') is not None:
+                data_ages.add(data.get('days_old'))
+
+        # Show info message if gases have different data ages
+        if len(data_ages) > 1:
+            max_age = max(data_ages)
+            st.info(f"ℹ️ **Note:** Some gases have data from different days due to cloud cover. Latest available data shown (up to {max_age} day{'s' if max_age != 1 else ''} old). Check individual gas details for specific dates.")
+
         display_metrics(pollution_data)
 
         # Summary statistics
