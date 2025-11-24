@@ -185,20 +185,18 @@ class SatelliteDataFetcher:
 
                 logger.info(f"Trying day {days_back} ago ({day_start_temp.date()}): {day_count} image(s) for {gas}")
 
-                # Get first image for timestamp
+                # CRITICAL: Try FIRST image (most recent) instead of median
+                # Reason: median() can fail if images don't perfectly overlap in the small AOI
+                # Sentinel-5P has 2-day revisit, so individual passes are better for small regions
                 first_image = day_collection.first()
                 first_info = first_image.getInfo()
 
                 if first_info is None:
                     continue
 
-                # Use same-day median if multiple observations, otherwise single image
-                if day_count > 1:
-                    test_image = day_collection.median()
-                    logger.info(f"Using median of {day_count} observations from {day_start_temp.date()}")
-                else:
-                    test_image = first_image
-                    logger.info(f"Using single observation from {day_start_temp.date()}")
+                # Start with the single most recent image
+                test_image = first_image
+                logger.info(f"Testing first/most recent image from {day_start_temp.date()}")
 
                 # Try to process this day - check if it has valid measurements
                 # Try multiple scales like the full processing does
@@ -217,9 +215,13 @@ class SatelliteDataFetcher:
                     ).getInfo()
 
                     test_mean = stats_test.get(gas_config["band"] + '_mean')
+                    logger.debug(f"Scale {test_scale}m: stats={stats_test}, mean={test_mean}")
+
                     if test_mean is not None:
-                        logger.info(f"✓ Found data at scale {test_scale}m")
+                        logger.info(f"✓ Found data at scale {test_scale}m: mean={test_mean}")
                         break
+                    else:
+                        logger.debug(f"✗ Scale {test_scale}m returned None")
 
                 # If this day has valid data, use it!
                 if test_mean is not None:
