@@ -196,7 +196,7 @@ def create_sidebar():
             if st.session_state.last_update:
                 from datetime import datetime, timedelta
                 import pytz
-                last_update_dt = datetime.strptime(st.session_state.last_update, "%Y-%m-%d %H:%M:%S")
+                last_update_dt = datetime.strptime(st.session_state.last_update, "%Y-%m-%d %H:%M:%S KSA")
                 ksa_tz = pytz.timezone(config.TIMEZONE)
                 last_update_ksa = ksa_tz.localize(last_update_dt)
                 next_refresh = last_update_ksa + timedelta(hours=refresh_hours)
