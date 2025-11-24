@@ -175,17 +175,20 @@ class SatelliteDataFetcher:
                 if day_count == 0:
                     continue
 
-                # Get first image from this day to test if it has valid data
-                test_image = day_collection.first()
-                test_info = test_image.getInfo()
+                # Get first image from this day for timestamp info
+                first_image = day_collection.first()
+                first_info = first_image.getInfo()
 
-                if test_info is None:
+                if first_info is None:
                     continue
 
-                # Try to get a quick measurement to see if data is valid
+                # Use median of all images from this day if multiple observations
                 if day_count > 1:
                     test_image = day_collection.median()
+                else:
+                    test_image = first_image
 
+                # Quick test to see if this day has valid data
                 band_data = test_image.select(gas_config["band"])
                 quick_stats = band_data.reduceRegion(
                     reducer=ee.Reducer.mean(),
@@ -201,7 +204,8 @@ class SatelliteDataFetcher:
                 if test_mean is not None:
                     image = test_image
                     same_day_count = day_count
-                    timestamp_ms = test_info['properties']['system:time_start']
+                    # Get timestamp from first image (median doesn't have timestamp)
+                    timestamp_ms = first_info['properties']['system:time_start']
                     timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
                     day_start = timestamp_utc.replace(hour=0, minute=0, second=0, microsecond=0)
 
