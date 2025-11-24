@@ -8,6 +8,7 @@ streamlit-folium
 branca
 Pillow
 google-generativeai
+google-cloud-firestore
 python-dotenv
 pytz
 requests

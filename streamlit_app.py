@@ -892,20 +892,28 @@ def display_violation_history(city: str):
         return
 
     # Show storage info
-    with st.expander("ℹ️ Storage Information", expanded=False):
-        st.markdown("""
-        **Note:** Violation history is stored locally on the server. On **Streamlit Cloud**,
-        storage is **ephemeral** - records may be cleared when the app restarts or redeploys.
+    storage_info = recorder.get_storage_info()
 
-        For persistent storage, consider connecting a database (PostgreSQL, MongoDB, etc.)
-        or cloud storage (Google Cloud Storage, AWS S3).
-        """)
-        if hasattr(recorder, 'writable'):
-            if recorder.writable:
-                st.success("✅ Storage is writable")
-            else:
-                st.error("❌ Storage is NOT writable - violations cannot be saved")
-        st.caption(f"Storage path: `{os.path.abspath(recorder.violations_dir)}`")
+    with st.expander("ℹ️ Storage Information", expanded=False):
+        if storage_info.get('use_firestore'):
+            st.success("☁️ **Google Cloud Firestore** - Persistent cloud storage enabled!")
+            st.markdown(f"""
+            - **Project:** `{storage_info.get('project_id')}`
+            - **Collection:** `{storage_info.get('collection_name')}`
+            - **Status:** {'✅ Connected & Writable' if storage_info.get('writable') else '❌ Not writable'}
+
+            Violations are stored permanently in Google Cloud and will persist across app restarts.
+            """)
+        else:
+            st.warning("📁 **Local Storage** - Records may be lost on app restart")
+            st.markdown(f"""
+            **Note:** Using local file storage. On **Streamlit Cloud**, storage is **ephemeral** -
+            records may be cleared when the app restarts or redeploys.
+
+            - **Path:** `{storage_info.get('local_path')}`
+            - **Status:** {'✅ Writable' if storage_info.get('writable') else '❌ Not writable'}
+            - **Firestore available:** {'Yes' if storage_info.get('firestore_available') else 'No (install google-cloud-firestore)'}
+            """)
 
     # Get statistics
     stats = recorder.get_statistics(city=city)
