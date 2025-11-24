@@ -915,10 +915,6 @@ def display_violation_history(city: str):
             - **Firestore available:** {'Yes' if storage_info.get('firestore_available') else 'No (install google-cloud-firestore)'}
             """)
 
-    # Debug: Try to get all violations without city filter first
-    all_violations = recorder.get_all_violations(city=None, limit=10)
-    st.caption(f"Debug: Found {len(all_violations)} total violations in Firestore")
-
     # Get statistics
     stats = recorder.get_statistics(city=city)
 
@@ -1016,13 +1012,10 @@ def display_violation_history(city: str):
                         st.markdown(f"**Wind:** {wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
 
                 with col2:
-                    # View map button
-                    map_img_path = recorder.get_violation_map_path(record['id'], image=True)
-                    map_html_path = recorder.get_violation_map_path(record['id'], image=False)
-
-                    if map_img_path and os.path.exists(map_img_path):
-                        if st.button("🗺️ View Heatmap", key=f"view_map_{record['id']}"):
-                            st.session_state[f"show_map_{record['id']}"] = True
+                    # Show hotspot on a mini map
+                    if record.get('hotspot'):
+                        hotspot = record['hotspot']
+                        st.markdown(f"**📍 Hotspot:** [{hotspot['lat']:.4f}, {hotspot['lon']:.4f}](https://www.google.com/maps?q={hotspot['lat']},{hotspot['lon']})")
 
                     if st.button("🗑️ Delete", key=f"delete_{record['id']}", type="secondary"):
                         if recorder.delete_violation(record['id']):
@@ -1041,32 +1034,6 @@ def display_violation_history(city: str):
                     for factory in record['nearby_factories'][:3]:
                         upwind_marker = "⚠️ UPWIND" if factory.get('likely_upwind') else ""
                         st.markdown(f"- {factory['name']} ({factory['distance_km']:.1f} km) {upwind_marker}")
-
-                # Display map if requested
-                if st.session_state.get(f"show_map_{record['id']}", False):
-                    st.divider()
-                    st.subheader("🗺️ Violation Heatmap")
-
-                    # Show PNG image if available
-                    if map_img_path and os.path.exists(map_img_path):
-                        st.image(map_img_path, use_container_width=True)
-
-                        # Option to view interactive HTML
-                        if map_html_path and os.path.exists(map_html_path):
-                            with open(map_html_path, 'r', encoding='utf-8') as f:
-                                html_content = f.read()
-
-                            st.download_button(
-                                label="📥 Download Interactive Map (HTML)",
-                                data=html_content,
-                                file_name=f"{record['id']}_map.html",
-                                mime="text/html",
-                                key=f"download_{record['id']}"
-                            )
-
-                    if st.button("Close Map", key=f"close_map_{record['id']}"):
-                        st.session_state[f"show_map_{record['id']}"] = False
-                        st.rerun()
 
     else:
         st.info("No violation records found matching the filters")
