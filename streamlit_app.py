@@ -442,17 +442,17 @@ def display_violations(pollution_data: Dict, city: str):
                         st.write(f"**Hotspot Location:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
 
                 with col2:
-                    # AI Analysis with Vision + Automatic Violation Saving
-                    st.write("**🤖 AI Source Analysis (with Vision):**")
-                    with st.spinner("Creating pollution map and analyzing with Gemini 3 vision..."):
-                        # Create map ONCE for both vision analysis AND saving
+                    # AI Analysis - Text-based analysis using satellite data
+                    st.write("**🤖 AI Source Analysis:**")
+                    with st.spinner("Analyzing pollution data with Gemini AI..."):
+                        # Create map for saving/display (not for AI vision on cloud)
                         import tempfile
                         import logging
                         logger = logging.getLogger(__name__)
 
-                        logger.info(f"Starting vision-enabled AI analysis for {violation['gas']} violation")
+                        logger.info(f"Starting AI analysis for {violation['gas']} violation")
 
-                        # Create pollution map (used for both AI and saving)
+                        # Create pollution map (used for saving)
                         temp_map = visualizer.create_pollution_map(
                             pollution_data[violation['gas']],
                             violation['wind'],
@@ -468,20 +468,19 @@ def display_violations(pollution_data: Dict, city: str):
                             temp_html_path = f.name
                         logger.info(f"Map saved as HTML: {temp_html_path}")
 
-                        # Convert to PNG for vision analysis (only once)
+                        # Try to convert to PNG for vision analysis (works locally, not on cloud)
                         temp_png_path = temp_html_path.replace('.html', '.png')
                         map_image_created = visualizer.save_map_as_image(temp_html_path, temp_png_path)
 
-                        # Run AI analysis with vision (if image created, otherwise text-only)
+                        # Run AI analysis (with vision if available, text-only on cloud)
                         if map_image_created:
-                            logger.info(f"✅ VISION MODE: Map image created at {temp_png_path}, passing to Gemini 3 Pro for visual analysis")
+                            logger.info(f"✅ VISION MODE: Map image created at {temp_png_path}")
                             analysis = analyzer.ai_analysis(violation, map_image_path=temp_png_path)
-                            logger.info("Vision-enabled AI analysis completed successfully")
                         else:
-                            logger.warning("⚠️ TEXT-ONLY MODE: Could not create map image, falling back to text-only analysis")
-                            st.warning("⚠️ Could not create map image, using text-only analysis")
+                            # Text-only mode is normal for cloud deployment - no warning needed
+                            logger.info("Using text-only AI analysis (standard for cloud deployment)")
                             analysis = analyzer.ai_analysis(violation)
-                            logger.info("Text-only AI analysis completed")
+                        logger.info("AI analysis completed successfully")
 
                     # Display full analysis in an expandable section
                     if len(analysis) > 300:
