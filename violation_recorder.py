@@ -274,30 +274,33 @@ class ViolationRecorder:
                            limit: Optional[int] = None) -> List[Dict]:
         """Get records from Firestore"""
         try:
+            # Get all documents and filter in Python to avoid index requirements
             query = self.db.collection(self.collection_name)
-
-            # Apply filters
-            if city:
-                query = query.where('city', '==', city)
-            if gas:
-                query = query.where('gas', '==', gas)
-
-            # Order by timestamp descending
-            query = query.order_by('timestamp', direction=firestore.Query.DESCENDING)
-
-            # Apply limit
-            if limit:
-                query = query.limit(limit)
-
-            # Execute query
             docs = query.stream()
             records = [doc.to_dict() for doc in docs]
+
+            # Filter by city if specified
+            if city:
+                records = [r for r in records if r.get('city') == city]
+
+            # Filter by gas if specified
+            if gas:
+                records = [r for r in records if r.get('gas') == gas]
+
+            # Sort by timestamp (newest first)
+            records.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+
+            # Apply limit if specified
+            if limit:
+                records = records[:limit]
 
             logger.info(f"Retrieved {len(records)} violations from Firestore")
             return records
 
         except Exception as e:
             logger.error(f"Firestore query failed: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
 
     def _get_from_local(self, city: Optional[str] = None,
