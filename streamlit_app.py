@@ -915,6 +915,10 @@ def display_violation_history(city: str):
             - **Firestore available:** {'Yes' if storage_info.get('firestore_available') else 'No (install google-cloud-firestore)'}
             """)
 
+    # Debug: Try to get all violations without city filter first
+    all_violations = recorder.get_all_violations(city=None, limit=10)
+    st.caption(f"Debug: Found {len(all_violations)} total violations in Firestore")
+
     # Get statistics
     stats = recorder.get_statistics(city=city)
 

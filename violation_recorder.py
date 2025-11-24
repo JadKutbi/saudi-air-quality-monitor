@@ -274,18 +274,36 @@ class ViolationRecorder:
                            limit: Optional[int] = None) -> List[Dict]:
         """Get records from Firestore"""
         try:
+            logger.info(f"Fetching violations from Firestore (city={city}, gas={gas}, limit={limit})")
+
             # Get all documents and filter in Python to avoid index requirements
-            query = self.db.collection(self.collection_name)
-            docs = query.stream()
-            records = [doc.to_dict() for doc in docs]
+            collection_ref = self.db.collection(self.collection_name)
+            docs = list(collection_ref.stream())
+
+            logger.info(f"Firestore returned {len(docs)} documents")
+
+            records = []
+            for doc in docs:
+                try:
+                    data = doc.to_dict()
+                    if data:
+                        records.append(data)
+                except Exception as doc_err:
+                    logger.error(f"Error parsing document {doc.id}: {doc_err}")
+
+            logger.info(f"Parsed {len(records)} records from Firestore")
 
             # Filter by city if specified
             if city:
+                before_filter = len(records)
                 records = [r for r in records if r.get('city') == city]
+                logger.info(f"Filtered by city '{city}': {before_filter} -> {len(records)}")
 
             # Filter by gas if specified
             if gas:
+                before_filter = len(records)
                 records = [r for r in records if r.get('gas') == gas]
+                logger.info(f"Filtered by gas '{gas}': {before_filter} -> {len(records)}")
 
             # Sort by timestamp (newest first)
             records.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
@@ -294,7 +312,7 @@ class ViolationRecorder:
             if limit:
                 records = records[:limit]
 
-            logger.info(f"Retrieved {len(records)} violations from Firestore")
+            logger.info(f"Returning {len(records)} violations from Firestore")
             return records
 
         except Exception as e:
