@@ -9,7 +9,7 @@ from datetime import datetime
 CITIES = {
     "Yanbu": {
         "center": [24.0889, 38.0618],
-        "bbox": [37.90, 23.85, 38.36, 24.25],  # EXPANDED: covers Yanbu Industrial City fully
+        "bbox": [38.07, 23.89, 38.46, 24.05],  # EXPANDED: covers Yanbu Industrial City fully
         "radius_km": 25  # Increased radius
     },
 
