@@ -143,15 +143,17 @@ class SatelliteDataFetcher:
 
             # DAY-BY-DAY FALLBACK STRATEGY: Find latest available valid data
             #
-            # Strategy:
-            # 1. Try each day starting from most recent, going backwards
-            # 2. For each day, use SAME-DAY MEDIAN only (no cross-day blending)
-            # 3. Process that day fully to check if it has valid measurements
-            # 4. If valid → use it and get wind for that exact day
-            # 5. If invalid (cloud cover) → try previous day
-            # 6. Search up to 30 days back
+            # Strategy: Find latest valid single reading for this gas
+            # 1. Sort all available satellite images by timestamp (newest first)
+            # 2. Iterate through images one-by-one, starting from most recent
+            # 3. For each image, check if it has valid measurements (not cloud-covered)
+            # 4. Stop as soon as we find the first valid image
+            # 5. Extract spatial statistics from that single image (mean, max, min across city)
+            # 6. Get wind data for that exact timestamp
+            # 7. Search up to 30 days back maximum
             #
-            # This ensures: Latest available data + Same-day median + Accurate wind sync
+            # Each gas searches independently - NO2 might be from today, CO from yesterday, etc.
+            # This ensures: Latest available data per gas + No image averaging + Accurate wind sync
 
             image = None
             timestamp_utc = None
@@ -249,12 +251,14 @@ class SatelliteDataFetcher:
                 return self._create_empty_response(city, gas,
                     error=f"No valid measurements in past {days_searched} days (persistent cloud cover)")
 
-            # Extract the pollution measurements
+            # Extract the pollution measurements from the single latest image
             band_data = image.select(gas_config["band"])
 
-            # COMPROMISE SOLUTION: Try without quality filtering first
-            # Single images often have too much cloud cover if we apply strict QA filtering
-            # We'll try to get data, and only apply QA if we have good coverage
+            # Calculate statistics WITHIN this single image across the city area:
+            # - mean: average pollution across all pixels in the city
+            # - max: hotspot (highest pollution pixel in the city)
+            # - min: lowest pollution pixel in the city
+            # NOTE: We're NOT averaging multiple images - this is one image's spatial statistics
 
             # Try multiple scales to handle sparse/cloud-affected data
             # Start with fine scale, progressively coarser if needed

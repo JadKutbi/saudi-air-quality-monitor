@@ -173,13 +173,8 @@ def create_sidebar():
         )
         st.session_state.selected_city = selected_city
 
-        days_back = st.slider(
-            "Search Period (days)",
-            min_value=1,
-            max_value=14,
-            value=3,
-            help="How far back to search for satellite data. System uses median of all observations from the most recent day (ensures wind sync while filling cloud gaps). Values will be identical across all slider positions."
-        )
+        # No slider needed - system automatically searches day-by-day for latest data per gas
+        days_back = None  # Not used - each gas finds its own latest data independently
 
         # Auto-refresh settings
         st.subheader("🔄 Refresh Settings")
