@@ -249,22 +249,37 @@ class SatelliteDataFetcher:
             # Single images often have too much cloud cover if we apply strict QA filtering
             # We'll try to get data, and only apply QA if we have good coverage
 
-            stats = band_data.reduceRegion(
-                reducer=ee.Reducer.mean().combine(
-                    reducer2=ee.Reducer.max(),
-                    sharedInputs=True
-                ).combine(
-                    reducer2=ee.Reducer.min(),
-                    sharedInputs=True
-                ).combine(
-                    reducer2=ee.Reducer.count(),
-                    sharedInputs=True
-                ),
-                geometry=aoi,
-                scale=1000,
-                maxPixels=1e9,
-                bestEffort=True
-            ).getInfo()
+            # Try multiple scales to handle sparse/cloud-affected data
+            # Start with fine scale, progressively coarser if needed
+            stats = None
+            mean_val = None
+            max_val = None
+            min_val = None
+
+            for scale in [1000, 2000, 5000, 10000]:
+                stats = band_data.reduceRegion(
+                    reducer=ee.Reducer.mean().combine(
+                        reducer2=ee.Reducer.max(),
+                        sharedInputs=True
+                    ).combine(
+                        reducer2=ee.Reducer.min(),
+                        sharedInputs=True
+                    ).combine(
+                        reducer2=ee.Reducer.count(),
+                        sharedInputs=True
+                    ),
+                    geometry=aoi,
+                    scale=scale,
+                    maxPixels=1e9,
+                    bestEffort=True
+                ).getInfo()
+
+                mean_val = stats.get(gas_config["band"] + '_mean')
+                max_val = stats.get(gas_config["band"] + '_max')
+
+                if mean_val is not None or max_val is not None:
+                    logger.info(f"Got statistics at scale {scale}m")
+                    break
             
             # Get pixel data with coordinates
             lat_lon = ee.Image.pixelLonLat()
@@ -316,41 +331,16 @@ class SatelliteDataFetcher:
                             'value': value
                         })
 
-            # Convert stats - handle None values
-            mean_val = stats.get(gas_config["band"] + '_mean')
-            max_val = stats.get(gas_config["band"] + '_max')
-            min_val = stats.get(gas_config["band"] + '_min')
-            count_val = stats.get(gas_config["band"] + '_count', 0)
-
-            # Check if we have valid data (either pixels or statistics)
-            # Note: Having statistics without pixels is normal for sparse data
-            if mean_val is None and max_val is None and len(pixels) == 0:
-                # Retry without quality filtering
-                band_data = image.select(gas_config["band"])
-                stats = band_data.reduceRegion(
-                    reducer=ee.Reducer.mean().combine(
-                        reducer2=ee.Reducer.max(),
-                        sharedInputs=True
-                    ).combine(
-                        reducer2=ee.Reducer.min(),
-                        sharedInputs=True
-                    ),
-                    geometry=aoi,
-                    scale=2000,  # Try coarser scale
-                    maxPixels=1e9,
-                    bestEffort=True
-                ).getInfo()
-
-                mean_val = stats.get(gas_config["band"] + '_mean')
-                max_val = stats.get(gas_config["band"] + '_max')
+            # Get min value and count from stats (already have mean and max from loop above)
+            if stats:
                 min_val = stats.get(gas_config["band"] + '_min')
+                count_val = stats.get(gas_config["band"] + '_count', 0)
 
-                if mean_val is None and max_val is None:
-                    # This shouldn't happen since we already validated in the day-by-day loop
-                    # But if it does, it means the selected day didn't have usable data
-                    logger.error(f"Selected day for {gas} didn't have valid data after validation")
-                    return self._create_empty_response(city, gas,
-                        error=f"Data processing failed for selected day")
+            # Final check - this should rarely fail now with multi-scale approach
+            if mean_val is None and max_val is None and len(pixels) == 0:
+                logger.warning(f"Selected day for {gas} had no usable data even with multi-scale processing")
+                return self._create_empty_response(city, gas,
+                    error=f"Data processing failed - insufficient cloud-free pixels")
             
             # Convert statistics to display units
             # Clamp all negative values to zero for cleaner display
