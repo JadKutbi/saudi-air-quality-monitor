@@ -135,11 +135,12 @@ class ViolationRecorder:
         """
         try:
             # Get recent violations for this city and gas
-            violations = self.get_all_violations(city=city, gas=gas, limit=50)
+            violations = self.get_all_violations(city=city, gas=gas, limit=100)
 
             for v in violations:
-                # Check if same satellite timestamp (the actual observation time)
-                if v.get('timestamp_ksa') == satellite_timestamp:
+                # Check satellite_timestamp field (new format) or timestamp_ksa (old format fallback)
+                stored_sat_ts = v.get('satellite_timestamp', v.get('timestamp_ksa', ''))
+                if stored_sat_ts == satellite_timestamp:
                     logger.info(f"Violation already exists: {v.get('id')} for {gas} at {satellite_timestamp}")
                     return v.get('id')
 
@@ -178,7 +179,7 @@ class ViolationRecorder:
 
             logger.info(f"Saving new violation for {gas} in {city}")
 
-            # Generate unique violation ID based on timestamp
+            # Generate unique violation ID based on save timestamp
             ksa_tz = pytz.timezone(config.TIMEZONE)
             now = datetime.now(ksa_tz)
             violation_id = now.strftime("%Y%m%d_%H%M%S")
@@ -188,11 +189,15 @@ class ViolationRecorder:
             # Create full ID: YYYYMMDD_HHMMSS_CITY_GAS
             full_id = f"{violation_id}_{city}_{gas}"
 
+            # Get satellite observation timestamp (the unique identifier for this violation)
+            satellite_timestamp = violation_data.get('timestamp_ksa', 'N/A')
+
             # Prepare record (Firestore-compatible - no complex objects)
             record = {
                 'id': full_id,
-                'timestamp': now.isoformat(),
-                'timestamp_ksa': now.strftime("%Y-%m-%d %H:%M:%S KSA"),
+                'timestamp': now.isoformat(),  # When saved
+                'timestamp_ksa': now.strftime("%Y-%m-%d %H:%M:%S KSA"),  # When saved (display)
+                'satellite_timestamp': satellite_timestamp,  # Satellite observation time (unique key)
                 'city': city,
                 'gas': gas,
                 'gas_name': violation_data['gas_name'],
