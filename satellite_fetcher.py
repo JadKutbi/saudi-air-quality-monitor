@@ -223,7 +223,9 @@ class SatelliteDataFetcher:
                         bestEffort=True
                     ).getInfo()
 
-                    test_mean = stats_test.get(gas_config["band"] + '_mean')
+                    # CRITICAL BUG FIX: ee.Reducer.mean() returns {band_name: value}, NOT {band_name_mean: value}!
+                    # Only .combine() appends suffixes like _mean, _max, etc.
+                    test_mean = stats_test.get(gas_config["band"])  # FIX: Remove '_mean' suffix
                     logger.debug(f"Scale {test_scale}m: stats={stats_test}, mean={test_mean}")
 
                     if test_mean is not None:
