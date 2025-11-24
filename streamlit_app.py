@@ -897,10 +897,12 @@ def display_violation_history(city: str):
     with st.expander("ℹ️ Storage Information", expanded=False):
         if storage_info.get('use_firestore'):
             st.success("☁️ **Google Cloud Firestore** - Persistent cloud storage enabled!")
+            cloud_storage_status = "✅ Enabled" if storage_info.get('use_cloud_storage') else "❌ Not configured"
             st.markdown(f"""
             - **Project:** `{storage_info.get('project_id')}`
             - **Collection:** `{storage_info.get('collection_name')}`
             - **Status:** {'✅ Connected & Writable' if storage_info.get('writable') else '❌ Not writable'}
+            - **Map Storage:** {cloud_storage_status} {f"(`{storage_info.get('bucket_name')}`)" if storage_info.get('use_cloud_storage') else ""}
 
             Violations are stored permanently in Google Cloud and will persist across app restarts.
             """)
@@ -1012,10 +1014,14 @@ def display_violation_history(city: str):
                         st.markdown(f"**Wind:** {wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
 
                 with col2:
-                    # Show hotspot on a mini map
+                    # Show hotspot location
                     if record.get('hotspot'):
                         hotspot = record['hotspot']
                         st.markdown(f"**📍 Hotspot:** [{hotspot['lat']:.4f}, {hotspot['lon']:.4f}](https://www.google.com/maps?q={hotspot['lat']},{hotspot['lon']})")
+
+                    # View heatmap button if map URL exists
+                    if record.get('map_url'):
+                        st.link_button("🗺️ View Heatmap", record['map_url'], type="primary")
 
                     if st.button("🗑️ Delete", key=f"delete_{record['id']}", type="secondary"):
                         if recorder.delete_violation(record['id']):
