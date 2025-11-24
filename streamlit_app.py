@@ -19,6 +19,7 @@ from satellite_fetcher import SatelliteDataFetcher
 from analyzer import PollutionAnalyzer
 from visualizer import MapVisualizer
 from data_validator import DataValidator
+from violation_recorder import ViolationRecorder
 from dashboard_components import (
     create_aqi_dashboard,
     create_health_risk_panel,
@@ -132,9 +133,17 @@ def initialize_services():
         st.warning(f"Data validator initialization issue: {str(e)}")
         services['validator'] = None
 
+    try:
+        recorder = ViolationRecorder()
+        services['recorder'] = recorder
+    except Exception as e:
+        st.warning(f"Violation recorder initialization issue: {str(e)}")
+        services['recorder'] = None
+
     # Return services (some may be None)
     return (services.get('fetcher'), services.get('analyzer'),
-            services.get('visualizer'), services.get('validator'))
+            services.get('visualizer'), services.get('validator'),
+            services.get('recorder'))
 
 def create_header():
     """Header section"""
@@ -261,7 +270,7 @@ def create_sidebar():
 @st.cache_data(ttl=1800)
 def fetch_pollution_data(city: str, days_back: int):
     """Fetch pollution data with improved error handling"""
-    fetcher, analyzer, _, _ = initialize_services()
+    fetcher, analyzer, _, _, _ = initialize_services()
 
     if not fetcher:
         st.error("❌ Cannot connect to Earth Engine satellite data")
@@ -366,7 +375,7 @@ def display_violations(pollution_data: Dict, city: str):
     """Display violations with AI analysis"""
     st.subheader("⚠️ Violation Analysis")
 
-    fetcher, analyzer, visualizer, validator = initialize_services()
+    fetcher, analyzer, visualizer, validator, recorder = initialize_services()
     violations = []
 
     for gas, data in pollution_data.items():
@@ -444,6 +453,38 @@ def display_violations(pollution_data: Dict, city: str):
                     else:
                         st.info(analysis)
 
+                    # Save violation button
+                    if recorder and st.button(f"💾 Save Record", key=f"save_{violation['gas']}"):
+                        with st.spinner("Saving violation record with heatmap..."):
+                            # Create a temporary map for this violation
+                            temp_map = visualizer.create_pollution_map(
+                                pollution_data[violation['gas']],
+                                violation['wind'],
+                                hotspot=violation['hotspot'],
+                                factories=violation['nearby_factories'],
+                                violation=True
+                            )
+
+                            # Save map to temp HTML
+                            import tempfile
+                            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                                temp_map.save(f.name)
+                                temp_html_path = f.name
+
+                            # Save violation with map
+                            violation_id = recorder.save_violation(violation, analysis, temp_html_path)
+
+                            # Clean up temp file
+                            try:
+                                os.remove(temp_html_path)
+                            except:
+                                pass
+
+                            if violation_id:
+                                st.success(f"✅ Violation saved: {violation_id}")
+                            else:
+                                st.error("Failed to save violation")
+
                 # Add factory list if available
                 if violation.get('nearby_factories'):
                     with st.expander(f"📍 Nearby Industrial Facilities ({len(violation['nearby_factories'])} found)"):
@@ -472,7 +513,7 @@ def display_map(pollution_data: Dict, city: str):
     from streamlit_folium import st_folium
 
     # Initialize visualizer
-    fetcher, analyzer, visualizer, validator = initialize_services()
+    fetcher, analyzer, visualizer, validator, _ = initialize_services()
 
     # Get ALL gases that have successful data (with or without pixels)
     available_gases = [gas for gas, data in pollution_data.items()
@@ -642,6 +683,156 @@ def display_trends(pollution_data: Dict):
 
         st.plotly_chart(fig, use_container_width=True)
 
+def display_violation_history(city: str):
+    """Display violation history with heatmap viewing"""
+    _, _, visualizer, _, recorder = initialize_services()
+
+    if not recorder:
+        st.warning("Violation recorder not available")
+        return
+
+    # Get statistics
+    stats = recorder.get_statistics(city=city)
+
+    # Display summary statistics
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Total Violations", stats['total_violations'])
+    with col2:
+        if stats['by_severity']:
+            most_severe = max(stats['by_severity'].keys(), key=lambda x: stats['by_severity'][x])
+            st.metric("Most Common Severity", most_severe.capitalize())
+    with col3:
+        if stats['by_gas']:
+            most_frequent = max(stats['by_gas'].keys(), key=lambda x: stats['by_gas'][x])
+            st.metric("Most Frequent Gas", most_frequent)
+    with col4:
+        if stats.get('date_range'):
+            st.metric("Records Since", stats['date_range']['oldest'].split()[0])
+
+    if stats['total_violations'] == 0:
+        st.info("No violations recorded yet. When violations are detected, you can save them from the Violations tab.")
+        return
+
+    st.divider()
+
+    # Filter controls
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col1:
+        gas_filter = st.selectbox(
+            "Filter by Gas",
+            ["All"] + list(stats['by_gas'].keys()),
+            key="history_gas_filter"
+        )
+    with col2:
+        limit = st.number_input("Show records", min_value=10, max_value=100, value=20, step=10)
+    with col3:
+        if st.button("🗑️ Clear All", type="secondary"):
+            if st.session_state.get('confirm_clear'):
+                # Actually clear
+                records = recorder.get_all_violations(city=city)
+                for record in records:
+                    recorder.delete_violation(record['id'])
+                st.success("All records cleared")
+                st.session_state.confirm_clear = False
+                st.rerun()
+            else:
+                st.session_state.confirm_clear = True
+                st.warning("Click again to confirm deletion")
+
+    # Get filtered violations
+    violations = recorder.get_all_violations(
+        city=city,
+        gas=None if gas_filter == "All" else gas_filter,
+        limit=limit
+    )
+
+    # Display violations
+    if violations:
+        st.subheader(f"📋 Showing {len(violations)} violation(s)")
+
+        for record in violations:
+            with st.expander(
+                f"🚨 {record['gas']} - {record['timestamp_ksa']} - {record['severity'].upper()}",
+                expanded=False
+            ):
+                col1, col2 = st.columns([3, 2])
+
+                with col1:
+                    # Violation details
+                    st.markdown(f"**Gas:** {record['gas_name']} ({record['gas']})")
+                    st.markdown(f"**Time:** {record['timestamp_ksa']}")
+                    st.markdown(f"**City:** {record['city']}")
+                    st.markdown(f"**Severity:** {record['severity'].upper()}")
+                    st.markdown(f"**Max Value:** {record['max_value']:.2f} {record['unit']}")
+                    st.markdown(f"**Threshold:** {record['threshold']:.1f} {record['unit']}")
+                    st.markdown(f"**Exceeded by:** {record['percentage_over']:.1f}%")
+
+                    # Hotspot location
+                    if record.get('hotspot'):
+                        st.markdown(f"**Hotspot:** ({record['hotspot']['lat']:.4f}, {record['hotspot']['lon']:.4f})")
+
+                    # Wind data
+                    if record.get('wind', {}).get('success'):
+                        wind = record['wind']
+                        st.markdown(f"**Wind:** {wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
+
+                with col2:
+                    # View map button
+                    map_img_path = recorder.get_violation_map_path(record['id'], image=True)
+                    map_html_path = recorder.get_violation_map_path(record['id'], image=False)
+
+                    if map_img_path and os.path.exists(map_img_path):
+                        if st.button("🗺️ View Heatmap", key=f"view_map_{record['id']}"):
+                            st.session_state[f"show_map_{record['id']}"] = True
+
+                    if st.button("🗑️ Delete", key=f"delete_{record['id']}", type="secondary"):
+                        if recorder.delete_violation(record['id']):
+                            st.success("Record deleted")
+                            st.rerun()
+                        else:
+                            st.error("Failed to delete record")
+
+                # AI Analysis
+                st.markdown("**🤖 AI Analysis:**")
+                st.info(record['ai_analysis'])
+
+                # Factory list
+                if record.get('nearby_factories'):
+                    st.markdown(f"**📍 Nearby Factories ({len(record['nearby_factories'])}):**")
+                    for factory in record['nearby_factories'][:3]:
+                        upwind_marker = "⚠️ UPWIND" if factory.get('likely_upwind') else ""
+                        st.markdown(f"- {factory['name']} ({factory['distance_km']:.1f} km) {upwind_marker}")
+
+                # Display map if requested
+                if st.session_state.get(f"show_map_{record['id']}", False):
+                    st.divider()
+                    st.subheader("🗺️ Violation Heatmap")
+
+                    # Show PNG image if available
+                    if map_img_path and os.path.exists(map_img_path):
+                        st.image(map_img_path, use_container_width=True)
+
+                        # Option to view interactive HTML
+                        if map_html_path and os.path.exists(map_html_path):
+                            with open(map_html_path, 'r', encoding='utf-8') as f:
+                                html_content = f.read()
+
+                            st.download_button(
+                                label="📥 Download Interactive Map (HTML)",
+                                data=html_content,
+                                file_name=f"{record['id']}_map.html",
+                                mime="text/html",
+                                key=f"download_{record['id']}"
+                            )
+
+                    if st.button("Close Map", key=f"close_map_{record['id']}"):
+                        st.session_state[f"show_map_{record['id']}"] = False
+                        st.rerun()
+
+    else:
+        st.info("No violation records found matching the filters")
+
 def main():
     """Main application"""
     # Create header
@@ -657,13 +848,14 @@ def main():
         st.info(f"🔄 Auto-refresh enabled - Updates every {interval_text}")
 
     # Main content with enhanced tabs
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         "📊 Overview",
         "🌡️ AQI Dashboard",
         "🗺️ Map View",
         "📈 Analysis",
         "⚠️ Violations",
-        "💡 Insights"
+        "💡 Insights",
+        "📜 History"
     ])
 
     # Fetch data
@@ -709,7 +901,7 @@ def main():
     with tab2:
         st.header("🌡️ Air Quality Index Dashboard")
         # Initialize validator
-        _, _, _, validator = initialize_services()
+        _, _, _, validator, _ = initialize_services()
 
         # AQI Dashboard
         create_aqi_dashboard(pollution_data, validator)
@@ -734,7 +926,7 @@ def main():
 
     with tab6:
         st.header("💡 Intelligent Insights & Predictions")
-        _, _, _, validator = initialize_services()
+        _, _, _, validator, _ = initialize_services()
 
         # Insights panel
         create_insights_panel(pollution_data, city, validator)
@@ -751,6 +943,10 @@ def main():
                             st.warning(f"⚠️ {warning}")
                         for error in validation['errors']:
                             st.error(f"❌ {error}")
+
+    with tab7:
+        st.header("📜 Violation History")
+        display_violation_history(city)
 
     # Footer with enhanced information
     st.divider()
