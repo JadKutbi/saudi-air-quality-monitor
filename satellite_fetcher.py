@@ -141,59 +141,98 @@ class SatelliteDataFetcher:
                     return self._create_empty_response(city, gas,
                         error=f"No satellite data available in the past {days_back * 3} days")
 
-            # IMPROVED FALLBACK STRATEGY: Search day by day for valid data
+            # DAY-BY-DAY FALLBACK STRATEGY: Find latest available valid data
             #
             # Strategy:
-            # 1. Try most recent day first (use median of all passes from that day)
-            # 2. If cloud cover prevents measurements, try previous day
-            # 3. Keep searching back up to 14 days to find latest valid data
-            # 4. Wind data will match the specific day of measurement
+            # 1. Try each day starting from most recent, going backwards
+            # 2. For each day, use SAME-DAY MEDIAN only (no cross-day blending)
+            # 3. Process that day fully to check if it has valid measurements
+            # 4. If valid → use it and get wind for that exact day
+            # 5. If invalid (cloud cover) → try previous day
+            # 6. Search up to 30 days back
             #
-            # This ensures we always get the most recent AVAILABLE data per gas
+            # This ensures: Latest available data + Same-day median + Accurate wind sync
 
             image = None
             timestamp_utc = None
+            timestamp_ksa = None
             day_start = None
             same_day_count = 0
-            max_days_to_search = 14
+            max_days_to_search = 30
+            days_searched = 0
 
             # Sort collection by date (newest first)
             sorted_collection = collection.sort('system:time_start', False)
 
-            # Get the most recent image to find its date
-            most_recent = sorted_collection.first()
-            info = most_recent.getInfo()
+            # Try each day going backwards until we find valid data
+            for days_back in range(max_days_to_search):
+                # Define the day to check
+                check_date = end_date - timedelta(days=days_back)
+                day_start_temp = check_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                day_end_temp = day_start_temp + timedelta(days=1)
 
-            if info is None:
-                logger.warning(f"No recent {gas} data available for {city}")
-                return self._create_empty_response(city, gas)
+                # Get images from this specific day only
+                day_collection = sorted_collection.filterDate(
+                    day_start_temp.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                    day_end_temp.strftime('%Y-%m-%dT%H:%M:%SZ')
+                )
 
-            # Get the date of the most recent observation
-            timestamp_ms = info['properties']['system:time_start']
-            timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+                day_count = day_collection.size().getInfo()
+                days_searched += 1
 
-            # Filter to only images from that same day
-            day_start = timestamp_utc.replace(hour=0, minute=0, second=0, microsecond=0)
-            day_end = day_start + timedelta(days=1)
+                if day_count == 0:
+                    continue  # No images for this day, try previous day
 
-            same_day_collection = sorted_collection.filterDate(
-                day_start.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                day_end.strftime('%Y-%m-%dT%H:%M:%SZ')
-            )
+                logger.info(f"Trying day {days_back} ago ({day_start_temp.date()}): {day_count} image(s) for {gas}")
 
-            same_day_count = same_day_collection.size().getInfo()
-            logger.info(f"Found {same_day_count} images from {day_start.date()} for {gas}")
+                # Get first image for timestamp
+                first_image = day_collection.first()
+                first_info = first_image.getInfo()
 
-            # Use median of all images from that day (fills cloud gaps)
-            if same_day_count > 1:
-                image = same_day_collection.median()
-                logger.info(f"Using median of {same_day_count} observations from same day")
-            else:
-                image = most_recent
-                logger.info(f"Using single observation from {day_start.date()}")
+                if first_info is None:
+                    continue
 
-            # Record when the satellite captured this data
-            timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
+                # Use same-day median if multiple observations, otherwise single image
+                if day_count > 1:
+                    test_image = day_collection.median()
+                    logger.info(f"Using median of {day_count} observations from {day_start_temp.date()}")
+                else:
+                    test_image = first_image
+                    logger.info(f"Using single observation from {day_start_temp.date()}")
+
+                # Try to process this day - check if it has valid measurements
+                band_data_test = test_image.select(gas_config["band"])
+                stats_test = band_data_test.reduceRegion(
+                    reducer=ee.Reducer.mean(),
+                    geometry=aoi,
+                    scale=2000,
+                    maxPixels=1e9,
+                    bestEffort=True
+                ).getInfo()
+
+                test_mean = stats_test.get(gas_config["band"] + '_mean')
+
+                # If this day has valid data, use it!
+                if test_mean is not None:
+                    image = test_image
+                    same_day_count = day_count
+                    day_start = day_start_temp
+
+                    # Get timestamp from first image of this day
+                    timestamp_ms = first_info['properties']['system:time_start']
+                    timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+                    timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
+
+                    logger.info(f"✓ Found valid {gas} data from {day_start.date()} ({days_back} day{'s' if days_back != 1 else ''} ago)")
+                    break
+                else:
+                    logger.debug(f"✗ Day {day_start_temp.date()} has cloud cover, trying previous day")
+
+            # If no valid data found after searching all days
+            if image is None:
+                logger.warning(f"No valid {gas} data found for {city} in past {days_searched} days (persistent cloud cover)")
+                return self._create_empty_response(city, gas,
+                    error=f"No valid measurements in past {days_searched} days (persistent cloud cover)")
 
             # Extract the pollution measurements
             band_data = image.select(gas_config["band"])
@@ -299,54 +338,11 @@ class SatelliteDataFetcher:
                 min_val = stats.get(gas_config["band"] + '_min')
 
                 if mean_val is None and max_val is None:
-                    # Last resort: Try getting ANY data from past 30 days (much wider search)
-                    logger.warning(f"No data from recent days, searching past 30 days for {gas}")
-                    extended_start = end_date - timedelta(days=30)
-                    extended_collection = ee.ImageCollection(gas_config["dataset"]) \
-                        .filterBounds(aoi) \
-                        .filterDate(extended_start.strftime('%Y-%m-%d'),
-                                   end_date.strftime('%Y-%m-%d')) \
-                        .select(gas_config["band"]) \
-                        .sort('system:time_start', False)
-
-                    extended_count = extended_collection.size().getInfo()
-                    if extended_count > 0:
-                        # Use median of ALL available images from past 30 days
-                        image = extended_collection.median()
-                        most_recent_extended = extended_collection.first().getInfo()
-                        if most_recent_extended:
-                            timestamp_ms = most_recent_extended['properties']['system:time_start']
-                            timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
-                            timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
-
-                            # Try one more time with this wider search
-                            band_data = image.select(gas_config["band"])
-                            stats = band_data.reduceRegion(
-                                reducer=ee.Reducer.mean().combine(
-                                    reducer2=ee.Reducer.max(),
-                                    sharedInputs=True
-                                ).combine(
-                                    reducer2=ee.Reducer.min(),
-                                    sharedInputs=True
-                                ),
-                                geometry=aoi,
-                                scale=2000,
-                                maxPixels=1e9,
-                                bestEffort=True
-                            ).getInfo()
-
-                            mean_val = stats.get(gas_config["band"] + '_mean')
-                            max_val = stats.get(gas_config["band"] + '_max')
-                            min_val = stats.get(gas_config["band"] + '_min')
-
-                            if mean_val is not None or max_val is not None:
-                                logger.info(f"Found {gas} data using 30-day median")
-                            else:
-                                return self._create_empty_response(city, gas,
-                                    error=f"No valid measurements (persistent cloud cover)")
-                    else:
-                        return self._create_empty_response(city, gas,
-                            error=f"No valid measurements (possible cloud cover)")
+                    # This shouldn't happen since we already validated in the day-by-day loop
+                    # But if it does, it means the selected day didn't have usable data
+                    logger.error(f"Selected day for {gas} didn't have valid data after validation")
+                    return self._create_empty_response(city, gas,
+                        error=f"Data processing failed for selected day")
             
             # Convert statistics to display units
             # Clamp all negative values to zero for cleaner display
