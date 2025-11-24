@@ -201,16 +201,24 @@ class SatelliteDataFetcher:
                     logger.info(f"Using single observation from {day_start_temp.date()}")
 
                 # Try to process this day - check if it has valid measurements
+                # Try multiple scales like the full processing does
                 band_data_test = test_image.select(gas_config["band"])
-                stats_test = band_data_test.reduceRegion(
-                    reducer=ee.Reducer.mean(),
-                    geometry=aoi,
-                    scale=2000,
-                    maxPixels=1e9,
-                    bestEffort=True
-                ).getInfo()
+                test_mean = None
 
-                test_mean = stats_test.get(gas_config["band"] + '_mean')
+                # Try finer scales first, then coarser if needed
+                for test_scale in [1000, 2000, 5000]:
+                    stats_test = band_data_test.reduceRegion(
+                        reducer=ee.Reducer.mean(),
+                        geometry=aoi,
+                        scale=test_scale,
+                        maxPixels=1e9,
+                        bestEffort=True
+                    ).getInfo()
+
+                    test_mean = stats_test.get(gas_config["band"] + '_mean')
+                    if test_mean is not None:
+                        logger.info(f"✓ Found data at scale {test_scale}m")
+                        break
 
                 # If this day has valid data, use it!
                 if test_mean is not None:
