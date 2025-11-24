@@ -9,7 +9,6 @@ branca
 Pillow
 google-generativeai
 google-cloud-firestore
-google-cloud-storage
 python-dotenv
 pytz
 requests

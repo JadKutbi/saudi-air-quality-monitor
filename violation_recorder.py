@@ -1,7 +1,7 @@
 """
 Violation Recorder - Records and manages violation history using Google Cloud Firestore
-Maps are stored in Google Cloud Storage
-Falls back to local storage if cloud services are not available
+Maps are stored as HTML content directly in Firestore documents
+Falls back to local storage if Firestore is not available
 """
 
 import json
@@ -23,14 +23,6 @@ except ImportError:
     FIRESTORE_AVAILABLE = False
     logger.warning("google-cloud-firestore not installed. Using local storage only.")
 
-# Try to import Cloud Storage
-try:
-    from google.cloud import storage as cloud_storage
-    CLOUD_STORAGE_AVAILABLE = True
-except ImportError:
-    CLOUD_STORAGE_AVAILABLE = False
-    logger.warning("google-cloud-storage not installed. Map storage disabled.")
-
 
 class ViolationRecorder:
     """Records violations with persistent storage using Google Cloud Firestore"""
@@ -47,27 +39,19 @@ class ViolationRecorder:
         self.records_file = os.path.join(violations_dir, "violation_records.json")
 
         self.db = None
-        self.storage_client = None
-        self.bucket = None
-        self.bucket_name = f"{config.GEE_PROJECT}-violation-maps"
         self.collection_name = "violations"
         self.use_firestore = False
-        self.use_cloud_storage = False
         self.writable = False
 
         # Try to initialize Firestore first
         if FIRESTORE_AVAILABLE:
             self._init_firestore()
 
-        # Try to initialize Cloud Storage for maps
-        if CLOUD_STORAGE_AVAILABLE and self.use_firestore:
-            self._init_cloud_storage()
-
         # Fallback to local storage if Firestore not available
         if not self.use_firestore:
             self._init_local_storage()
 
-        logger.info(f"ViolationRecorder initialized. Firestore: {self.use_firestore}, CloudStorage: {self.use_cloud_storage}, Writable: {self.writable}")
+        logger.info(f"ViolationRecorder initialized. Firestore: {self.use_firestore}, Writable: {self.writable}")
 
     def _init_firestore(self):
         """Initialize Google Cloud Firestore connection"""
@@ -118,61 +102,6 @@ class ViolationRecorder:
             logger.warning(f"Firestore initialization failed: {e}")
             logger.info("Falling back to local storage")
             self.use_firestore = False
-
-    def _init_cloud_storage(self):
-        """Initialize Google Cloud Storage for map files"""
-        try:
-            import streamlit as st
-            from google.oauth2 import service_account
-
-            # Check for service account credentials
-            if hasattr(st, 'secrets') and 'GEE_SERVICE_ACCOUNT' in st.secrets:
-                credentials_dict = {
-                    "type": "service_account",
-                    "project_id": st.secrets.get("GEE_PROJECT_ID", config.GEE_PROJECT),
-                    "private_key_id": st.secrets.get("GEE_PRIVATE_KEY_ID", ""),
-                    "private_key": st.secrets.get("GEE_PRIVATE_KEY", "").replace("\\n", "\n"),
-                    "client_email": st.secrets.get("GEE_SERVICE_ACCOUNT", ""),
-                    "client_id": st.secrets.get("GEE_CLIENT_ID", ""),
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
-
-                credentials = service_account.Credentials.from_service_account_info(
-                    credentials_dict,
-                    scopes=["https://www.googleapis.com/auth/devstorage.read_write"]
-                )
-
-                self.storage_client = cloud_storage.Client(
-                    project=st.secrets.get("GEE_PROJECT_ID", config.GEE_PROJECT),
-                    credentials=credentials
-                )
-            else:
-                self.storage_client = cloud_storage.Client(project=config.GEE_PROJECT)
-
-            # Try to get or create bucket
-            try:
-                self.bucket = self.storage_client.get_bucket(self.bucket_name)
-                logger.info(f"Cloud Storage bucket found: {self.bucket_name}")
-            except Exception:
-                # Bucket doesn't exist, try to create it
-                try:
-                    self.bucket = self.storage_client.create_bucket(
-                        self.bucket_name,
-                        location="europe-west1"  # Same as Firestore
-                    )
-                    logger.info(f"Cloud Storage bucket created: {self.bucket_name}")
-                except Exception as create_err:
-                    logger.warning(f"Could not create bucket: {create_err}")
-                    logger.info("Map storage will be disabled")
-                    return
-
-            self.use_cloud_storage = True
-            logger.info("Cloud Storage initialized successfully")
-
-        except Exception as e:
-            logger.warning(f"Cloud Storage initialization failed: {e}")
-            self.use_cloud_storage = False
 
     def _init_local_storage(self):
         """Initialize local file storage as fallback"""
@@ -293,11 +222,19 @@ class ViolationRecorder:
         """Save record to Firestore and upload map to Cloud Storage"""
         try:
             # Upload map to Cloud Storage if available
-            if map_html_path and os.path.exists(map_html_path) and self.use_cloud_storage:
-                map_url = self._upload_map_to_cloud_storage(full_id, map_html_path)
-                if map_url:
-                    record['map_url'] = map_url
-                    logger.info(f"Map uploaded to Cloud Storage: {map_url}")
+            # Store map HTML content directly in Firestore
+            if map_html_path and os.path.exists(map_html_path):
+                try:
+                    with open(map_html_path, 'r', encoding='utf-8') as f:
+                        map_html_content = f.read()
+                    # Only store if under 900KB (Firestore doc limit is 1MB)
+                    if len(map_html_content) < 900000:
+                        record['map_html'] = map_html_content
+                        logger.info(f"Map HTML stored in Firestore ({len(map_html_content)} bytes)")
+                    else:
+                        logger.warning(f"Map HTML too large ({len(map_html_content)} bytes), skipping")
+                except Exception as html_err:
+                    logger.warning(f"Could not read map HTML: {html_err}")
 
             doc_ref = self.db.collection(self.collection_name).document(full_id)
             doc_ref.set(record)
@@ -328,34 +265,6 @@ class ViolationRecorder:
             return full_id
         except Exception as e:
             logger.error(f"Local save failed: {e}")
-            return None
-
-    def _upload_map_to_cloud_storage(self, full_id: str, map_html_path: str) -> Optional[str]:
-        """Upload map HTML file to Google Cloud Storage"""
-        try:
-            if not self.bucket:
-                logger.warning("Cloud Storage bucket not available")
-                return None
-
-            # Create blob name
-            blob_name = f"maps/{full_id}_map.html"
-            blob = self.bucket.blob(blob_name)
-
-            # Upload the file
-            blob.upload_from_filename(map_html_path, content_type='text/html')
-
-            # Make publicly readable
-            blob.make_public()
-
-            # Get public URL
-            public_url = blob.public_url
-            logger.info(f"Map uploaded to Cloud Storage: {public_url}")
-            return public_url
-
-        except Exception as e:
-            logger.error(f"Failed to upload map to Cloud Storage: {e}")
-            import traceback
-            logger.error(traceback.format_exc())
             return None
 
     def get_all_violations(self, city: Optional[str] = None,
@@ -600,12 +509,9 @@ class ViolationRecorder:
         """Get information about current storage configuration"""
         return {
             'use_firestore': self.use_firestore,
-            'use_cloud_storage': self.use_cloud_storage,
             'writable': self.writable,
             'firestore_available': FIRESTORE_AVAILABLE,
-            'cloud_storage_available': CLOUD_STORAGE_AVAILABLE,
             'collection_name': self.collection_name if self.use_firestore else None,
-            'bucket_name': self.bucket_name if self.use_cloud_storage else None,
             'local_path': os.path.abspath(self.violations_dir) if not self.use_firestore else None,
             'project_id': config.GEE_PROJECT if self.use_firestore else None
         }

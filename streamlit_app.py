@@ -897,14 +897,13 @@ def display_violation_history(city: str):
     with st.expander("ℹ️ Storage Information", expanded=False):
         if storage_info.get('use_firestore'):
             st.success("☁️ **Google Cloud Firestore** - Persistent cloud storage enabled!")
-            cloud_storage_status = "✅ Enabled" if storage_info.get('use_cloud_storage') else "❌ Not configured"
             st.markdown(f"""
             - **Project:** `{storage_info.get('project_id')}`
             - **Collection:** `{storage_info.get('collection_name')}`
             - **Status:** {'✅ Connected & Writable' if storage_info.get('writable') else '❌ Not writable'}
-            - **Map Storage:** {cloud_storage_status} {f"(`{storage_info.get('bucket_name')}`)" if storage_info.get('use_cloud_storage') else ""}
+            - **Map Storage:** ✅ Stored in Firestore (HTML embedded)
 
-            Violations are stored permanently in Google Cloud and will persist across app restarts.
+            Violations and heatmaps are stored permanently in Google Cloud.
             """)
         else:
             st.warning("📁 **Local Storage** - Records may be lost on app restart")
@@ -1019,9 +1018,10 @@ def display_violation_history(city: str):
                         hotspot = record['hotspot']
                         st.markdown(f"**📍 Hotspot:** [{hotspot['lat']:.4f}, {hotspot['lon']:.4f}](https://www.google.com/maps?q={hotspot['lat']},{hotspot['lon']})")
 
-                    # View heatmap button if map URL exists
-                    if record.get('map_url'):
-                        st.link_button("🗺️ View Heatmap", record['map_url'], type="primary")
+                    # View heatmap button if map HTML exists
+                    if record.get('map_html'):
+                        if st.button("🗺️ View Heatmap", key=f"view_map_{record['id']}", type="primary"):
+                            st.session_state[f"show_map_{record['id']}"] = not st.session_state.get(f"show_map_{record['id']}", False)
 
                     if st.button("🗑️ Delete", key=f"delete_{record['id']}", type="secondary"):
                         if recorder.delete_violation(record['id']):
@@ -1040,6 +1040,22 @@ def display_violation_history(city: str):
                     for factory in record['nearby_factories'][:3]:
                         upwind_marker = "⚠️ UPWIND" if factory.get('likely_upwind') else ""
                         st.markdown(f"- {factory['name']} ({factory['distance_km']:.1f} km) {upwind_marker}")
+
+                # Display heatmap if toggled
+                if st.session_state.get(f"show_map_{record['id']}", False) and record.get('map_html'):
+                    st.divider()
+                    st.subheader("🗺️ Violation Heatmap")
+                    import streamlit.components.v1 as components
+                    components.html(record['map_html'], height=500, scrolling=True)
+
+                    # Download button
+                    st.download_button(
+                        label="📥 Download Map (HTML)",
+                        data=record['map_html'],
+                        file_name=f"{record['id']}_heatmap.html",
+                        mime="text/html",
+                        key=f"download_{record['id']}"
+                    )
 
     else:
         st.info("No violation records found matching the filters")
