@@ -205,8 +205,9 @@ class SatelliteDataFetcher:
                 band_data_test = test_image.select(gas_config["band"])
                 test_mean = None
 
-                # Try finer scales first, then coarser if needed
-                for test_scale in [1000, 2000, 5000]:
+                # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
+                # Then try coarser scales if needed
+                for test_scale in [1113, 2000, 5000, 10000]:
                     stats_test = band_data_test.reduceRegion(
                         reducer=ee.Reducer.mean(),
                         geometry=aoi,
@@ -256,7 +257,9 @@ class SatelliteDataFetcher:
             max_val = None
             min_val = None
 
-            for scale in [1000, 2000, 5000, 10000]:
+            # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
+            # Official resolution from GEE documentation
+            for scale in [1113, 2000, 5000, 10000]:
                 stats = band_data.reduceRegion(
                     reducer=ee.Reducer.mean().combine(
                         reducer2=ee.Reducer.max(),
@@ -286,7 +289,8 @@ class SatelliteDataFetcher:
             combined = band_data.addBands(lat_lon)
             
             # Sample the region at different scales to handle sparse data
-            scales = [1000, 2000, 5000, 10000]
+            # Start with native Sentinel-5P resolution
+            scales = [1113, 2000, 5000, 10000]
             sample_count = 0
             samples = None
 
