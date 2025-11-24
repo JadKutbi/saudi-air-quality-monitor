@@ -22,10 +22,22 @@ class ViolationRecorder:
         self.records_file = os.path.join(violations_dir, "violation_records.json")
 
         # Create directories if they don't exist
-        os.makedirs(self.violations_dir, exist_ok=True)
-        os.makedirs(self.maps_dir, exist_ok=True)
+        try:
+            os.makedirs(self.violations_dir, exist_ok=True)
+            os.makedirs(self.maps_dir, exist_ok=True)
+            logger.info(f"ViolationRecorder initialized: {os.path.abspath(violations_dir)}")
+            logger.info(f"Records file: {os.path.abspath(self.records_file)}")
 
-        logger.info(f"ViolationRecorder initialized: {violations_dir}")
+            # Test write access
+            test_file = os.path.join(self.violations_dir, ".write_test")
+            with open(test_file, 'w') as f:
+                f.write("test")
+            os.remove(test_file)
+            self.writable = True
+            logger.info("Storage is writable")
+        except Exception as e:
+            logger.error(f"Storage initialization failed: {e}")
+            self.writable = False
 
     def save_violation(self, violation_data: Dict, analysis: str,
                       map_html_path: Optional[str] = None) -> str:
@@ -40,7 +52,12 @@ class ViolationRecorder:
         Returns:
             Violation ID (timestamp-based)
         """
+        if not self.writable:
+            logger.error("Cannot save violation: storage is not writable")
+            return None
+
         try:
+            logger.info(f"Attempting to save violation for {violation_data.get('gas')} in {violation_data.get('city')}")
             # Generate unique violation ID based on timestamp
             ksa_tz = pytz.timezone(config.TIMEZONE)
             now = datetime.now(ksa_tz)

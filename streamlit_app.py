@@ -891,6 +891,22 @@ def display_violation_history(city: str):
         st.warning("Violation recorder not available")
         return
 
+    # Show storage info
+    with st.expander("ℹ️ Storage Information", expanded=False):
+        st.markdown("""
+        **Note:** Violation history is stored locally on the server. On **Streamlit Cloud**,
+        storage is **ephemeral** - records may be cleared when the app restarts or redeploys.
+
+        For persistent storage, consider connecting a database (PostgreSQL, MongoDB, etc.)
+        or cloud storage (Google Cloud Storage, AWS S3).
+        """)
+        if hasattr(recorder, 'writable'):
+            if recorder.writable:
+                st.success("✅ Storage is writable")
+            else:
+                st.error("❌ Storage is NOT writable - violations cannot be saved")
+        st.caption(f"Storage path: `{os.path.abspath(recorder.violations_dir)}`")
+
     # Get statistics
     stats = recorder.get_statistics(city=city)
 
@@ -902,16 +918,26 @@ def display_violation_history(city: str):
         if stats['by_severity']:
             most_severe = max(stats['by_severity'].keys(), key=lambda x: stats['by_severity'][x])
             st.metric("Most Common Severity", most_severe.capitalize())
+        else:
+            st.metric("Most Common Severity", "N/A")
     with col3:
         if stats['by_gas']:
             most_frequent = max(stats['by_gas'].keys(), key=lambda x: stats['by_gas'][x])
             st.metric("Most Frequent Gas", most_frequent)
+        else:
+            st.metric("Most Frequent Gas", "N/A")
     with col4:
         if stats.get('date_range'):
             st.metric("Records Since", stats['date_range']['oldest'].split()[0])
+        else:
+            st.metric("Records Since", "N/A")
 
     if stats['total_violations'] == 0:
-        st.info("No violations recorded yet. When violations are detected, you can save them from the Violations tab.")
+        st.info("No violations recorded yet. Violations are automatically saved when detected in the '⚠️ Violations' tab.")
+
+        # Check if there are current violations that could be saved
+        st.markdown("---")
+        st.markdown("**💡 Tip:** Go to the **⚠️ Violations** tab to detect and auto-save any current violations.")
         return
 
     st.divider()

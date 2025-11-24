@@ -46,10 +46,10 @@ class PollutionAnalyzer:
         if VERTEX_AI_AVAILABLE and vertex_project and vertex_location:
             try:
                 vertexai.init(project=vertex_project, location=vertex_location)
-                # Use Gemini 2.0 Flash Thinking - best vision model for analysis
-                self.model = GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
+                # Use Gemini 3 Pro - best vision model for spatial analysis and multimodal reasoning
+                self.model = GenerativeModel("gemini-3-pro-preview-11-2025")
                 self.use_vertex = True
-                logger.info(f"Vertex AI initialized with gemini-2.0-flash-thinking-exp-01-21 (project: {vertex_project}, location: {vertex_location})")
+                logger.info(f"Vertex AI initialized with gemini-3-pro-preview-11-2025 (project: {vertex_project}, location: {vertex_location})")
             except Exception as e:
                 logger.warning(f"Vertex AI initialization failed: {e}")
                 logger.info("Falling back to standard Gemini API...")
@@ -57,9 +57,9 @@ class PollutionAnalyzer:
         # Fallback to standard Gemini API
         if not self.model and gemini_api_key and genai:
             genai.configure(api_key=gemini_api_key)
-            self.model = genai.GenerativeModel('gemini-2.0-flash-exp')
+            self.model = genai.GenerativeModel('gemini-3-pro-preview')
             self.use_vertex = False
-            logger.info("Google Gemini API initialized (gemini-2.0-flash-exp)")
+            logger.info("Google Gemini API initialized (gemini-3-pro-preview)")
     
     def find_hotspot(self, gas_data: Dict) -> Optional[Dict]:
         """
@@ -491,15 +491,18 @@ Keep response concise (max 300 words), professional, and actionable."""
             # Add map image if provided (for vision analysis)
             if map_image_path and os.path.exists(map_image_path):
                 try:
+                    logger.info(f"🖼️ VISION MODE ENABLED: Loading map image from {map_image_path}")
                     if self.use_vertex:
                         # Vertex AI format
                         image_part = Image.load_from_file(map_image_path)
                         content_parts.append(image_part)
+                        logger.info("Map image loaded successfully (Vertex AI format)")
                     else:
                         # Standard Gemini API format
                         from PIL import Image as PILImage
                         img = PILImage.open(map_image_path)
                         content_parts.append(img)
+                        logger.info("Map image loaded successfully (Standard API format)")
 
                     image_included = True
 
@@ -529,9 +532,15 @@ CRITICAL VISION TASKS:
 
 Use the visual map to provide insights beyond the numerical data."""
 
-                    logger.info(f"Map image added to {'Vertex AI' if self.use_vertex else 'Gemini'} vision analysis")
+                    logger.info(f"✅ Map image added to {'Vertex AI' if self.use_vertex else 'Gemini'} vision analysis - Gemini 3 will perform spatial analysis")
                 except Exception as img_err:
-                    logger.warning(f"Could not load map image for vision analysis: {img_err}")
+                    logger.error(f"❌ VISION MODE FAILED: Could not load map image for vision analysis: {img_err}")
+                    logger.info("Falling back to TEXT-ONLY mode")
+            elif map_image_path:
+                logger.warning(f"⚠️ Map image path provided but file does not exist: {map_image_path}")
+                logger.info("Using TEXT-ONLY mode")
+            else:
+                logger.info("📝 TEXT-ONLY MODE: No map image provided, using numerical data only")
 
             # Add text prompt (Vertex AI expects prompt first, then image)
             if self.use_vertex:
@@ -540,6 +549,8 @@ Use the visual map to provide insights beyond the numerical data."""
                 content_parts.append(prompt)
 
             # Generate AI analysis
+            logger.info(f"Sending request to Gemini 3 Pro ({'Vertex AI' if self.use_vertex else 'Standard API'}) - Vision: {image_included}, High-Res: True")
+
             if self.use_vertex:
                 response = self.model.generate_content(
                     content_parts,
@@ -547,6 +558,7 @@ Use the visual map to provide insights beyond the numerical data."""
                         'temperature': 0.3,
                         'max_output_tokens': 800,  # More tokens for vision analysis
                         'top_p': 0.95,
+                        'media_resolution': 'high',  # High resolution for detailed spatial analysis
                     }
                 )
             else:
@@ -555,11 +567,17 @@ Use the visual map to provide insights beyond the numerical data."""
                     generation_config={
                         'temperature': 0.3,
                         'max_output_tokens': 800,
+                        'media_resolution': 'high',  # High resolution for detailed spatial analysis
                     }
                 )
-            
+
             analysis = response.text  # NEW: Access text directly
-            logger.info("Gemini AI analysis completed successfully")
+
+            if image_included:
+                logger.info("✅ Gemini 3 Pro VISION analysis completed successfully - AI analyzed pollution map visually")
+            else:
+                logger.info("✅ Gemini 3 Pro TEXT-ONLY analysis completed successfully")
+
             return analysis
             
         except Exception as e:
