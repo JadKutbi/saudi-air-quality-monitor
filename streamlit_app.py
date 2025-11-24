@@ -490,44 +490,35 @@ def display_violations(pollution_data: Dict, city: str):
                     else:
                         st.info(analysis)
 
-                    # Automatically save violation (check if not already saved in this session)
-                    save_key = f"saved_{violation['gas']}_{violation['timestamp_ksa']}"
-                    if recorder and save_key not in st.session_state:
-                        with st.spinner("Saving violation record..."):
-                            # Reuse the same HTML map (no need to recreate)
-                            logger.info(f"Saving violation record with existing map: {temp_html_path}")
+                    # Automatically save violation (recorder handles duplicate check)
+                    if recorder:
+                        # Check if already exists before showing spinner
+                        existing_id = recorder.violation_exists(
+                            violation['city'],
+                            violation['gas'],
+                            violation['timestamp_ksa']
+                        )
 
-                            # Save violation with map (recorder will handle PNG conversion again for permanent storage)
-                            violation_id = recorder.save_violation(violation, analysis, temp_html_path)
+                        if existing_id:
+                            st.caption(f"📁 Already saved: {existing_id}")
+                        else:
+                            with st.spinner("Saving violation record..."):
+                                violation_id = recorder.save_violation(violation, analysis, temp_html_path)
 
-                            if violation_id:
-                                st.session_state[save_key] = violation_id
-                                st.success(f"✅ Auto-saved: {violation_id}")
-                                logger.info(f"Violation saved successfully: {violation_id}")
-                            else:
-                                st.warning("Auto-save failed")
-                                logger.error("Failed to save violation record")
+                                if violation_id:
+                                    st.success(f"✅ Saved: {violation_id}")
+                                    logger.info(f"Violation saved successfully: {violation_id}")
+                                else:
+                                    st.warning("Save failed")
+                                    logger.error("Failed to save violation record")
 
-                        # Clean up temp files AFTER saving
-                        try:
-                            os.remove(temp_html_path)
-                            if map_image_created and os.path.exists(temp_png_path):
-                                os.remove(temp_png_path)
-                            logger.info("Temporary files cleaned up successfully")
-                        except Exception as cleanup_err:
-                            logger.warning(f"Failed to clean up temp files: {cleanup_err}")
-                    else:
-                        # Clean up temp files if not saving
-                        try:
-                            os.remove(temp_html_path)
-                            if map_image_created and os.path.exists(temp_png_path):
-                                os.remove(temp_png_path)
-                            logger.info("Temporary files cleaned up (violation already saved)")
-                        except Exception as cleanup_err:
-                            logger.warning(f"Failed to clean up temp files: {cleanup_err}")
-
-                    if save_key in st.session_state:
-                        st.caption(f"📁 Saved as: {st.session_state[save_key]}")
+                    # Clean up temp files
+                    try:
+                        os.remove(temp_html_path)
+                        if map_image_created and os.path.exists(temp_png_path):
+                            os.remove(temp_png_path)
+                    except Exception as cleanup_err:
+                        logger.warning(f"Failed to clean up temp files: {cleanup_err}")
 
                 # Add factory list if available
                 if violation.get('nearby_factories'):

@@ -121,6 +121,33 @@ class ViolationRecorder:
             logger.error(f"Local storage initialization failed: {e}")
             self.writable = False
 
+    def violation_exists(self, city: str, gas: str, satellite_timestamp: str) -> Optional[str]:
+        """
+        Check if a violation with the same city, gas, and satellite timestamp already exists.
+
+        Args:
+            city: City name
+            gas: Gas type (e.g., 'NO2', 'SO2')
+            satellite_timestamp: The satellite observation timestamp
+
+        Returns:
+            Violation ID if exists, None otherwise
+        """
+        try:
+            # Get recent violations for this city and gas
+            violations = self.get_all_violations(city=city, gas=gas, limit=50)
+
+            for v in violations:
+                # Check if same satellite timestamp (the actual observation time)
+                if v.get('timestamp_ksa') == satellite_timestamp:
+                    logger.info(f"Violation already exists: {v.get('id')} for {gas} at {satellite_timestamp}")
+                    return v.get('id')
+
+            return None
+        except Exception as e:
+            logger.error(f"Error checking for existing violation: {e}")
+            return None
+
     def save_violation(self, violation_data: Dict, analysis: str,
                       map_html_path: Optional[str] = None) -> Optional[str]:
         """
@@ -132,14 +159,24 @@ class ViolationRecorder:
             map_html_path: Path to saved HTML map (not stored in Firestore)
 
         Returns:
-            Violation ID (timestamp-based) or None if failed
+            Violation ID (timestamp-based) or None if failed, or existing ID if duplicate
         """
         if not self.writable:
             logger.error("Cannot save violation: storage is not writable")
             return None
 
         try:
-            logger.info(f"Saving violation for {violation_data.get('gas')} in {violation_data.get('city')}")
+            city = violation_data.get('city', '')
+            gas = violation_data.get('gas', '')
+            satellite_timestamp = violation_data.get('timestamp_ksa', '')
+
+            # Check if this violation already exists
+            existing_id = self.violation_exists(city, gas, satellite_timestamp)
+            if existing_id:
+                logger.info(f"Skipping duplicate violation: {existing_id}")
+                return existing_id  # Return existing ID instead of None
+
+            logger.info(f"Saving new violation for {gas} in {city}")
 
             # Generate unique violation ID based on timestamp
             ksa_tz = pytz.timezone(config.TIMEZONE)
