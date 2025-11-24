@@ -442,10 +442,46 @@ def display_violations(pollution_data: Dict, city: str):
                         st.write(f"**Hotspot Location:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
 
                 with col2:
-                    # AI Analysis
-                    st.write("**🤖 AI Source Analysis:**")
-                    with st.spinner("Analyzing pollution source..."):
-                        analysis = analyzer.ai_analysis(violation)
+                    # AI Analysis with Vision + Automatic Violation Saving
+                    st.write("**🤖 AI Source Analysis (with Vision):**")
+                    with st.spinner("Creating pollution map and analyzing with Gemini 3 vision..."):
+                        # Create map ONCE for both vision analysis AND saving
+                        import tempfile
+                        import logging
+                        logger = logging.getLogger(__name__)
+
+                        logger.info(f"Starting vision-enabled AI analysis for {violation['gas']} violation")
+
+                        # Create pollution map (used for both AI and saving)
+                        temp_map = visualizer.create_pollution_map(
+                            pollution_data[violation['gas']],
+                            violation['wind'],
+                            hotspot=violation['hotspot'],
+                            factories=violation['nearby_factories'],
+                            violation=True
+                        )
+                        logger.info("Pollution map created successfully")
+
+                        # Save map as HTML
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
+                            temp_map.save(f.name)
+                            temp_html_path = f.name
+                        logger.info(f"Map saved as HTML: {temp_html_path}")
+
+                        # Convert to PNG for vision analysis (only once)
+                        temp_png_path = temp_html_path.replace('.html', '.png')
+                        map_image_created = visualizer.save_map_as_image(temp_html_path, temp_png_path)
+
+                        # Run AI analysis with vision (if image created, otherwise text-only)
+                        if map_image_created:
+                            logger.info(f"✅ VISION MODE: Map image created at {temp_png_path}, passing to Gemini 3 Pro for visual analysis")
+                            analysis = analyzer.ai_analysis(violation, map_image_path=temp_png_path)
+                            logger.info("Vision-enabled AI analysis completed successfully")
+                        else:
+                            logger.warning("⚠️ TEXT-ONLY MODE: Could not create map image, falling back to text-only analysis")
+                            st.warning("⚠️ Could not create map image, using text-only analysis")
+                            analysis = analyzer.ai_analysis(violation)
+                            logger.info("Text-only AI analysis completed")
 
                     # Display full analysis in an expandable section
                     if len(analysis) > 300:
@@ -459,36 +495,39 @@ def display_violations(pollution_data: Dict, city: str):
                     save_key = f"saved_{violation['gas']}_{violation['timestamp_ksa']}"
                     if recorder and save_key not in st.session_state:
                         with st.spinner("Saving violation record..."):
-                            # Create a temporary map for this violation
-                            temp_map = visualizer.create_pollution_map(
-                                pollution_data[violation['gas']],
-                                violation['wind'],
-                                hotspot=violation['hotspot'],
-                                factories=violation['nearby_factories'],
-                                violation=True
-                            )
+                            # Reuse the same HTML map (no need to recreate)
+                            logger.info(f"Saving violation record with existing map: {temp_html_path}")
 
-                            # Save map to temp HTML
-                            import tempfile
-                            with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
-                                temp_map.save(f.name)
-                                temp_html_path = f.name
-
-                            # Save violation with map
+                            # Save violation with map (recorder will handle PNG conversion again for permanent storage)
                             violation_id = recorder.save_violation(violation, analysis, temp_html_path)
-
-                            # Clean up temp file
-                            try:
-                                os.remove(temp_html_path)
-                            except:
-                                pass
 
                             if violation_id:
                                 st.session_state[save_key] = violation_id
                                 st.success(f"✅ Auto-saved: {violation_id}")
+                                logger.info(f"Violation saved successfully: {violation_id}")
                             else:
                                 st.warning("Auto-save failed")
-                    elif save_key in st.session_state:
+                                logger.error("Failed to save violation record")
+
+                        # Clean up temp files AFTER saving
+                        try:
+                            os.remove(temp_html_path)
+                            if map_image_created and os.path.exists(temp_png_path):
+                                os.remove(temp_png_path)
+                            logger.info("Temporary files cleaned up successfully")
+                        except Exception as cleanup_err:
+                            logger.warning(f"Failed to clean up temp files: {cleanup_err}")
+                    else:
+                        # Clean up temp files if not saving
+                        try:
+                            os.remove(temp_html_path)
+                            if map_image_created and os.path.exists(temp_png_path):
+                                os.remove(temp_png_path)
+                            logger.info("Temporary files cleaned up (violation already saved)")
+                        except Exception as cleanup_err:
+                            logger.warning(f"Failed to clean up temp files: {cleanup_err}")
+
+                    if save_key in st.session_state:
                         st.caption(f"📁 Saved as: {st.session_state[save_key]}")
 
                 # Add factory list if available
@@ -664,30 +703,186 @@ def display_map(pollution_data: Dict, city: str):
         st_folium(pollution_map, width=None, height=600, returned_objects=[])
 
 def display_trends(pollution_data: Dict):
-    """Display trend charts"""
+    """Display trend charts with each gas in a separate graph"""
     st.subheader("📈 Pollution Trends")
 
-    # Create trend data
+    # Create trend data with percentage of threshold
     trend_data = []
     for gas, data in pollution_data.items():
         if data.get('success'):
+            threshold = config.GAS_THRESHOLDS.get(gas, {}).get('column_threshold', 0)
+            critical = config.GAS_THRESHOLDS.get(gas, {}).get('critical_threshold', 0)
+            max_val = data['statistics']['max']
+            mean_val = data['statistics']['mean']
+            min_val = data['statistics']['min']
+
+            # Calculate percentage of threshold (normalized view)
+            max_pct = (max_val / threshold * 100) if threshold > 0 else 0
+
             trend_data.append({
                 'Gas': gas,
-                'Mean': data['statistics']['mean'],
-                'Max': data['statistics']['max'],
-                'Threshold': config.GAS_THRESHOLDS.get(gas, {}).get('column_threshold', 0)
+                'Gas Name': config.GAS_PRODUCTS[gas]['name'],
+                'Max (% of Threshold)': max_pct,
+                'Max Value': max_val,
+                'Mean Value': mean_val,
+                'Min Value': min_val,
+                'Threshold Value': threshold,
+                'Critical Value': critical,
+                'Unit': data['unit']
             })
 
     if trend_data:
+        # Summary section at top
+        col1, col2 = st.columns(2)
+
+        with col1:
+            # Violation status pie chart
+            violation_count = sum(1 for row in trend_data if row['Max (% of Threshold)'] > 100)
+            safe_count = len(trend_data) - violation_count
+
+            if violation_count > 0 or safe_count > 0:
+                pie_data = pd.DataFrame({
+                    'Status': ['Within Limits', 'Violation'],
+                    'Count': [safe_count, violation_count]
+                })
+
+                fig_pie = px.pie(pie_data, values='Count', names='Status',
+                             title="🎯 Violation Summary",
+                             color='Status',
+                             color_discrete_map={'Within Limits': '#10b981', 'Violation': '#ef4444'})
+
+                st.plotly_chart(fig_pie, use_container_width=True)
+
+                if violation_count > 0:
+                    violating_gases = [row['Gas'] for row in trend_data if row['Max (% of Threshold)'] > 100]
+                    st.warning(f"⚠️ Violations detected: {', '.join(violating_gases)}")
+
+        with col2:
+            # Quick summary metrics
+            st.markdown("### Quick Summary")
+            for row in trend_data:
+                pct = row['Max (% of Threshold)']
+                if pct > 100:
+                    st.markdown(f"🔴 **{row['Gas']}**: {pct:.0f}% of threshold (VIOLATION)")
+                elif pct > 80:
+                    st.markdown(f"🟡 **{row['Gas']}**: {pct:.0f}% of threshold (Warning)")
+                else:
+                    st.markdown(f"🟢 **{row['Gas']}**: {pct:.0f}% of threshold (Normal)")
+
+        st.divider()
+
+        # Individual gas charts - each gas gets its own graph
+        st.subheader("📊 Individual Gas Analysis")
+
+        # Create a 2-column layout for individual gas charts
+        num_gases = len(trend_data)
+        cols_per_row = 2
+
+        for i in range(0, num_gases, cols_per_row):
+            cols = st.columns(cols_per_row)
+
+            for j, col in enumerate(cols):
+                if i + j < num_gases:
+                    row = trend_data[i + j]
+                    gas = row['Gas']
+                    gas_name = row['Gas Name']
+                    max_val = row['Max Value']
+                    mean_val = row['Mean Value']
+                    min_val = row['Min Value']
+                    threshold = row['Threshold Value']
+                    critical = row['Critical Value']
+                    unit = row['Unit']
+                    pct = row['Max (% of Threshold)']
+
+                    with col:
+                        # Determine status color
+                        if pct > 100:
+                            status_color = "#ef4444"  # Red
+                            status_text = "VIOLATION"
+                        elif pct > 80:
+                            status_color = "#f59e0b"  # Yellow/Orange
+                            status_text = "WARNING"
+                        else:
+                            status_color = "#10b981"  # Green
+                            status_text = "NORMAL"
+
+                        # Create gauge-style bar chart for each gas
+                        fig = go.Figure()
+
+                        # Add bars for Min, Mean, Max
+                        fig.add_trace(go.Bar(
+                            x=['Min', 'Mean', 'Max'],
+                            y=[min_val, mean_val, max_val],
+                            marker_color=['#3b82f6', '#8b5cf6', status_color],
+                            text=[f'{min_val:.2f}', f'{mean_val:.2f}', f'{max_val:.2f}'],
+                            textposition='outside',
+                            name=gas
+                        ))
+
+                        # Add threshold line
+                        fig.add_hline(
+                            y=threshold,
+                            line_dash="dash",
+                            line_color="orange",
+                            annotation_text=f"Threshold: {threshold:.1f}",
+                            annotation_position="right"
+                        )
+
+                        # Add critical threshold line if different from threshold
+                        if critical > threshold:
+                            fig.add_hline(
+                                y=critical,
+                                line_dash="dot",
+                                line_color="red",
+                                annotation_text=f"Critical: {critical:.1f}",
+                                annotation_position="right"
+                            )
+
+                        # Update layout
+                        fig.update_layout(
+                            title=dict(
+                                text=f"{gas} - {gas_name}<br><sub>{status_text} ({pct:.0f}% of threshold)</sub>",
+                                font=dict(size=14)
+                            ),
+                            yaxis_title=unit,
+                            showlegend=False,
+                            height=350,
+                            margin=dict(t=80, b=40, l=60, r=60),
+                            plot_bgcolor='white',
+                            yaxis=dict(
+                                gridcolor='lightgray',
+                                zeroline=True,
+                                zerolinecolor='lightgray'
+                            )
+                        )
+
+                        st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+
+        # Detailed table with actual values
+        st.subheader("📋 Detailed Values Table")
         df = pd.DataFrame(trend_data)
+        display_df = df[['Gas', 'Gas Name', 'Min Value', 'Mean Value', 'Max Value', 'Threshold Value', 'Unit', 'Max (% of Threshold)']].copy()
+        display_df['Max (% of Threshold)'] = display_df['Max (% of Threshold)'].round(1)
+        display_df = display_df.rename(columns={
+            'Min Value': 'Min',
+            'Max Value': 'Max',
+            'Mean Value': 'Mean',
+            'Threshold Value': 'WHO Threshold',
+            'Max (% of Threshold)': '% of Threshold'
+        })
 
-        # Bar chart
-        fig = px.bar(df, x='Gas', y=['Max', 'Mean', 'Threshold'],
-                     title="Gas Concentrations vs Thresholds",
-                     barmode='group',
-                     color_discrete_map={'Max': '#ef4444', 'Mean': '#3b82f6', 'Threshold': '#10b981'})
+        # Apply color styling
+        def color_violations(val):
+            if isinstance(val, (int, float)) and val > 100:
+                return 'background-color: #fee2e2; color: #991b1b'
+            elif isinstance(val, (int, float)) and val > 80:
+                return 'background-color: #fef3c7; color: #92400e'
+            return ''
 
-        st.plotly_chart(fig, use_container_width=True)
+        styled_df = display_df.style.applymap(color_violations, subset=['% of Threshold'])
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 def display_violation_history(city: str):
     """Display violation history with heatmap viewing"""
