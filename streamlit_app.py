@@ -174,7 +174,8 @@ def create_sidebar():
         st.session_state.selected_city = selected_city
 
         # No slider needed - system automatically searches day-by-day for latest data per gas
-        days_back = None  # Not used - each gas finds its own latest data independently
+        # The satellite fetcher will automatically search up to 30 days back for each gas independently
+        days_back = 30  # Maximum search window - each gas stops when it finds valid data
 
         # Auto-refresh settings
         st.subheader("🔄 Refresh Settings")
@@ -283,7 +284,7 @@ def fetch_pollution_data(city: str, days_back: int):
 
     gases = list(config.GAS_PRODUCTS.keys())
     for i, gas in enumerate(gases):
-        status.text(f"🔍 Searching for {gas} data (past {days_back} days)...")
+        status.text(f"🔍 Searching for latest {gas} data (up to {days_back} days back)...")
         progress.progress((i + 1) / len(gases))
 
         try:
