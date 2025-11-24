@@ -161,94 +161,87 @@ class SatelliteDataFetcher:
             max_days_to_search = 30
             days_searched = 0
 
-            # Sort collection by date (newest first)
+            # Sort collection by date (newest first) to get absolute latest readings
             sorted_collection = collection.sort('system:time_start', False)
 
-            # Try each day going backwards until we find valid data
-            for days_back in range(max_days_to_search):
-                # Define the day to check
-                check_date = end_date - timedelta(days=days_back)
-                day_start_temp = check_date.replace(hour=0, minute=0, second=0, microsecond=0)
-                day_end_temp = day_start_temp + timedelta(days=1)
+            # Convert to list to iterate through individual images
+            image_list = sorted_collection.toList(collection_count)
 
-                # Get images from this specific day only
-                day_collection = sorted_collection.filterDate(
-                    day_start_temp.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                    day_end_temp.strftime('%Y-%m-%dT%H:%M:%SZ')
-                )
+            # Try each image one by one, starting from the most recent
+            for image_index in range(collection_count):
+                try:
+                    # Get individual image from the sorted list
+                    test_image = ee.Image(image_list.get(image_index))
+                    test_info = test_image.getInfo()
 
-                day_count = day_collection.size().getInfo()
-                days_searched += 1
+                    if test_info is None:
+                        continue
 
-                if day_count == 0:
-                    continue  # No images for this day, try previous day
+                    # Get timestamp for this specific image
+                    timestamp_ms = test_info['properties']['system:time_start']
+                    timestamp_utc_temp = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
+                    timestamp_ksa_temp = timestamp_utc_temp.astimezone(pytz.timezone(config.TIMEZONE))
+                    days_ago = (datetime.now(pytz.UTC) - timestamp_utc_temp).days
 
-                logger.info(f"Trying day {days_back} ago ({day_start_temp.date()}): {day_count} image(s) for {gas}")
+                    days_searched += 1
+                    logger.info(f"Trying image {image_index + 1}/{collection_count} from {timestamp_ksa_temp.strftime('%Y-%m-%d %H:%M:%S')} ({days_ago} day{'s' if days_ago != 1 else ''} ago)")
 
-                # CRITICAL: Try FIRST image (most recent) instead of median
-                # Reason: median() can fail if images don't perfectly overlap in the small AOI
-                # Sentinel-5P has 2-day revisit, so individual passes are better for small regions
-                first_image = day_collection.first()
-                first_info = first_image.getInfo()
+                    # Stop searching if we've gone back too far
+                    if days_ago >= max_days_to_search:
+                        logger.info(f"Reached max search limit ({max_days_to_search} days)")
+                        break
 
-                if first_info is None:
-                    continue
+                    # DIAGNOSTIC: Check image bounds to see if it covers our AOI
+                    image_bounds = test_image.geometry().bounds().getInfo()
+                    logger.debug(f"Image bounds: {image_bounds}")
+                    logger.debug(f"AOI bounds: {aoi.bounds().getInfo()}")
 
-                # Start with the single most recent image
-                test_image = first_image
-                logger.info(f"Testing first/most recent image from {day_start_temp.date()}")
+                    # Check if AOI intersects with image
+                    intersects = test_image.geometry().intersects(aoi, maxError=1000).getInfo()
+                    logger.debug(f"AOI intersects with image: {intersects}")
 
-                # DIAGNOSTIC: Check image bounds to see if it covers our AOI
-                image_bounds = test_image.geometry().bounds().getInfo()
-                logger.debug(f"Image bounds: {image_bounds}")
-                logger.debug(f"AOI bounds: {aoi.bounds().getInfo()}")
+                    # Try to process this image - check if it has valid measurements
+                    # Try multiple scales like the full processing does
+                    band_data_test = test_image.select(gas_config["band"])
+                    test_mean = None
 
-                # Check if AOI intersects with image
-                intersects = test_image.geometry().intersects(aoi, maxError=1000).getInfo()
-                logger.debug(f"AOI intersects with image: {intersects}")
+                    # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
+                    # Then try coarser scales if needed
+                    for test_scale in [1113, 2000, 5000, 10000]:
+                        stats_test = band_data_test.reduceRegion(
+                            reducer=ee.Reducer.mean(),
+                            geometry=aoi,
+                            scale=test_scale,
+                            maxPixels=1e9,
+                            bestEffort=True
+                        ).getInfo()
 
-                # Try to process this day - check if it has valid measurements
-                # Try multiple scales like the full processing does
-                band_data_test = test_image.select(gas_config["band"])
-                test_mean = None
+                        # CRITICAL BUG FIX: ee.Reducer.mean() returns {band_name: value}, NOT {band_name_mean: value}!
+                        # Only .combine() appends suffixes like _mean, _max, etc.
+                        test_mean = stats_test.get(gas_config["band"])  # FIX: Remove '_mean' suffix
+                        logger.debug(f"Scale {test_scale}m: stats={stats_test}, mean={test_mean}")
 
-                # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
-                # Then try coarser scales if needed
-                for test_scale in [1113, 2000, 5000, 10000]:
-                    stats_test = band_data_test.reduceRegion(
-                        reducer=ee.Reducer.mean(),
-                        geometry=aoi,
-                        scale=test_scale,
-                        maxPixels=1e9,
-                        bestEffort=True
-                    ).getInfo()
+                        if test_mean is not None:
+                            logger.info(f"✓ Found data at scale {test_scale}m: mean={test_mean}")
+                            break
+                        else:
+                            logger.debug(f"✗ Scale {test_scale}m returned None")
 
-                    # CRITICAL BUG FIX: ee.Reducer.mean() returns {band_name: value}, NOT {band_name_mean: value}!
-                    # Only .combine() appends suffixes like _mean, _max, etc.
-                    test_mean = stats_test.get(gas_config["band"])  # FIX: Remove '_mean' suffix
-                    logger.debug(f"Scale {test_scale}m: stats={stats_test}, mean={test_mean}")
-
+                    # If this image has valid data, use it!
                     if test_mean is not None:
-                        logger.info(f"✓ Found data at scale {test_scale}m: mean={test_mean}")
+                        image = test_image
+                        timestamp_utc = timestamp_utc_temp
+                        timestamp_ksa = timestamp_ksa_temp
+                        same_day_count = 1  # Single image, not a composite
+
+                        logger.info(f"✓ Found valid {gas} data from {timestamp_ksa.strftime('%Y-%m-%d %H:%M:%S KSA')} ({days_ago} day{'s' if days_ago != 1 else ''} ago)")
                         break
                     else:
-                        logger.debug(f"✗ Scale {test_scale}m returned None")
+                        logger.debug(f"✗ Image from {timestamp_ksa_temp.strftime('%Y-%m-%d %H:%M:%S')} has cloud cover, trying next image")
 
-                # If this day has valid data, use it!
-                if test_mean is not None:
-                    image = test_image
-                    same_day_count = day_count
-                    day_start = day_start_temp
-
-                    # Get timestamp from first image of this day
-                    timestamp_ms = first_info['properties']['system:time_start']
-                    timestamp_utc = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
-                    timestamp_ksa = timestamp_utc.astimezone(pytz.timezone(config.TIMEZONE))
-
-                    logger.info(f"✓ Found valid {gas} data from {day_start.date()} ({days_back} day{'s' if days_back != 1 else ''} ago)")
-                    break
-                else:
-                    logger.debug(f"✗ Day {day_start_temp.date()} has cloud cover, trying previous day")
+                except Exception as e:
+                    logger.debug(f"Error processing image {image_index}: {e}")
+                    continue
 
             # If no valid data found after searching all days
             if image is None:
