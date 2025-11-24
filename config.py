@@ -493,5 +493,5 @@ NOTIFICATION_CONFIG = {
 }
 
 GEE_PROJECT = 'rcjyenviroment'
-LOG_LEVEL = "INFO"
+LOG_LEVEL = "DEBUG"  # TEMPORARY: Enable debug logging to diagnose reduceRegion issue
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

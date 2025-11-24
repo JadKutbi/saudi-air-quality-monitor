@@ -198,6 +198,15 @@ class SatelliteDataFetcher:
                 test_image = first_image
                 logger.info(f"Testing first/most recent image from {day_start_temp.date()}")
 
+                # DIAGNOSTIC: Check image bounds to see if it covers our AOI
+                image_bounds = test_image.geometry().bounds().getInfo()
+                logger.debug(f"Image bounds: {image_bounds}")
+                logger.debug(f"AOI bounds: {aoi.bounds().getInfo()}")
+
+                # Check if AOI intersects with image
+                intersects = test_image.geometry().intersects(aoi, maxError=1000).getInfo()
+                logger.debug(f"AOI intersects with image: {intersects}")
+
                 # Try to process this day - check if it has valid measurements
                 # Try multiple scales like the full processing does
                 band_data_test = test_image.select(gas_config["band"])

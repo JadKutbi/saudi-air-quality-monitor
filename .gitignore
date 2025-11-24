@@ -1,10 +1,41 @@
+# IMPORTANT: Never commit these files!
 .env
+.env.local
 .streamlit/secrets.toml
-*.pyc
+secrets.json
+credentials.json
+*.key
+
+# Python
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+ENV/
+
+# Data and logs
 data/
 logs/
 violations/
-venv/
+*.log
+
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# GEE credentials
+.config/earthengine/
+
+# Temporary files
+*.tmp
+*.bak

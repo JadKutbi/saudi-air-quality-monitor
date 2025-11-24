@@ -1,0 +1,160 @@
+From 5ae124714f414d95fdfd93ed42dd124b5f9cdbc9 Mon Sep 17 00:00:00 2001
+From: west coast <jadkutbi@gmail.com>
+Date: Sun, 23 Nov 2025 12:59:02 +0300
+Subject: [PATCH] Fix heatmap display using folium and streamlit-folium
+
+- Replace Plotly Densitymapbox with proper folium HeatMap
+- Add streamlit-folium integration to display interactive map
+- Add gas selector with violation indicators
+- Use MapVisualizer to create proper heatmap with WHO thresholds
+- Display factories, wind arrows, and hotspot markers
+---
+ streamlit_app.py | 130 ++++++++++++++++++++++++++++-------------------
+ 1 file changed, 78 insertions(+), 52 deletions(-)
+
+diff --git a/streamlit_app.py b/streamlit_app.py
+index dc33bfd..cdf3c21 100644
+--- a/streamlit_app.py
++++ b/streamlit_app.py
+@@ -303,60 +303,86 @@ def display_map(pollution_data: Dict, city: str):
+     """Display interactive pollution map"""
+     st.subheader("🗺️ Pollution Heatmap")
+ 
+-    # Get city coordinates
+-    city_info = config.CITIES[city]
+-    center_lat, center_lon = city_info['center']
+-
+-    # Create map figure
+-    fig = go.Figure()
+-
+-    # Add factory markers
+-    factories = config.FACTORIES.get(city, [])
+-    if factories:
+-        factory_lats = [f['location'][0] for f in factories]
+-        factory_lons = [f['location'][1] for f in factories]
+-        factory_names = [f['name'] for f in factories]
+-
+-        fig.add_trace(go.Scattermapbox(
+-            mode='markers',
+-            lon=factory_lons,
+-            lat=factory_lats,
+-            marker={'size': 10, 'color': 'red'},
+-            text=factory_names,
+-            name='Factories'
+-        ))
+-
+-    # Add pollution data if available
+-    for gas, data in pollution_data.items():
+-        if data.get('success') and data.get('pixels'):
+-            pixels = data['pixels'][:100]  # Limit for performance
+-            if pixels:
+-                lats = [p['lat'] for p in pixels]
+-                lons = [p['lon'] for p in pixels]
+-                values = [p['value'] for p in pixels]
+-
+-                fig.add_trace(go.Densitymapbox(
+-                    lat=lats,
+-                    lon=lons,
+-                    z=values,
+-                    radius=20,
+-                    name=gas,
+-                    colorscale='Hot',
+-                    showscale=True
+-                ))
+-
+-    # Update layout
+-    fig.update_layout(
+-        mapbox_style="carto-positron",
+-        mapbox=dict(
+-            center=dict(lat=center_lat, lon=center_lon),
+-            zoom=10
+-        ),
+-        height=600,
+-        margin={"r":0,"t":0,"l":0,"b":0}
++    # Import streamlit_folium for displaying folium maps
++    from streamlit_folium import st_folium
++
++    # Initialize visualizer
++    fetcher, analyzer, visualizer = initialize_services()
++
++    # Get available gases
++    available_gases = [gas for gas, data in pollution_data.items()
++                      if data.get('success') and data.get('pixels')]
++
++    if not available_gases:
++        st.warning("No pollution data available to display on the map")
++        return
++
++    # Find gas with violation (if any)
++    violation_gas = None
++    for gas in available_gases:
++        threshold_check = analyzer.check_threshold_violation(
++            gas, pollution_data[gas]['statistics']['max']
++        )
++        if threshold_check['violated']:
++            violation_gas = gas
++            break
++
++    # Gas selector
++    default_index = 0
++    if violation_gas:
++        default_index = available_gases.index(violation_gas)
++
++    selected_gas = st.selectbox(
++        "Select Gas to Display:",
++        available_gases,
++        index=default_index,
++        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''}"
+     )
+ 
+-    st.plotly_chart(fig, use_container_width=True)
++    if selected_gas:
++        gas_data = pollution_data[selected_gas]
++
++        # Find hotspot
++        hotspot = analyzer.find_hotspot(gas_data)
++
++        # Get nearby factories
++        factories = None
++        if hotspot:
++            factories = analyzer.find_nearby_factories(hotspot, city)
++
++            # Add wind data to factory ranking
++            wind_data = gas_data.get('wind', {})
++            if wind_data.get('success'):
++                factories = analyzer.calculate_wind_vector_to_factories(
++                    hotspot, factories, wind_data
++                )
++
++        # Check if this is a violation
++        threshold_check = analyzer.check_threshold_violation(selected_gas, gas_data['statistics']['max'])
++        violation = threshold_check['violated']
++
++        # Create the folium map with heatmap
++        gas_data_for_map = {
++            'city': city,
++            'gas': selected_gas,
++            'pixels': gas_data.get('pixels', []),
++            'statistics': gas_data.get('statistics', {}),
++            'unit': gas_data.get('unit', '')
++        }
++
++        wind_data = gas_data.get('wind', {})
++
++        # Create the pollution map
++        pollution_map = visualizer.create_pollution_map(
++            gas_data=gas_data_for_map,
++            wind_data=wind_data,
++            hotspot=hotspot,
++            factories=factories,
++            violation=violation
++        )
++
++        # Display the map
++        st_folium(pollution_map, width=None, height=600, returned_objects=[])
+ 
+ def display_trends(pollution_data: Dict):
+     """Display trend charts"""
+-- 
+2.49.0.windows.1
+
