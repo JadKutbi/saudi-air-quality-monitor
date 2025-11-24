@@ -453,9 +453,10 @@ def display_violations(pollution_data: Dict, city: str):
                     else:
                         st.info(analysis)
 
-                    # Save violation button
-                    if recorder and st.button(f"💾 Save Record", key=f"save_{violation['gas']}"):
-                        with st.spinner("Saving violation record with heatmap..."):
+                    # Automatically save violation (check if not already saved in this session)
+                    save_key = f"saved_{violation['gas']}_{violation['timestamp_ksa']}"
+                    if recorder and save_key not in st.session_state:
+                        with st.spinner("Saving violation record..."):
                             # Create a temporary map for this violation
                             temp_map = visualizer.create_pollution_map(
                                 pollution_data[violation['gas']],
@@ -481,9 +482,12 @@ def display_violations(pollution_data: Dict, city: str):
                                 pass
 
                             if violation_id:
-                                st.success(f"✅ Violation saved: {violation_id}")
+                                st.session_state[save_key] = violation_id
+                                st.success(f"✅ Auto-saved: {violation_id}")
                             else:
-                                st.error("Failed to save violation")
+                                st.warning("Auto-save failed")
+                    elif save_key in st.session_state:
+                        st.caption(f"📁 Saved as: {st.session_state[save_key]}")
 
                 # Add factory list if available
                 if violation.get('nearby_factories'):
