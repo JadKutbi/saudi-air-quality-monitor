@@ -10,10 +10,31 @@ from typing import Dict, List
 import pytz
 from datetime import datetime
 import config
+from translations import get_text
+
+
+def t(key: str) -> str:
+    """Get translated text for current language."""
+    return get_text(key, st.session_state.get('language', 'en'))
+
+
+def get_aqi_category_translated(category: str) -> str:
+    """Translate AQI category name"""
+    category_map = {
+        'Good': 'aqi_good',
+        'Moderate': 'aqi_moderate',
+        'Unhealthy for Sensitive': 'aqi_unhealthy_sensitive',
+        'Unhealthy': 'aqi_unhealthy',
+        'Very Unhealthy': 'aqi_very_unhealthy',
+        'Hazardous': 'aqi_hazardous'
+    }
+    key = category_map.get(category, 'unknown')
+    return t(key)
+
 
 def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
     """Create comprehensive AQI dashboard"""
-    st.subheader("🌡️ Air Quality Index (AQI) Dashboard")
+    st.subheader(f"🌡️ {t('aqi_dashboard')}")
 
     # Calculate AQI for all gases
     aqi_data = []
@@ -25,6 +46,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                     'Gas': gas,
                     'AQI': aqi_info['aqi'],
                     'Category': aqi_info['category'],
+                    'CategoryTranslated': get_aqi_category_translated(aqi_info['category']),
                     'Color': aqi_info['color']
                 })
 
@@ -39,7 +61,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                 mode="gauge+number",
                 value=max_aqi['AQI'],
                 domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': "Overall AQI"},
+                title={'text': t('overall_aqi')},
                 gauge={
                     'axis': {'range': [None, 500]},
                     'bar': {'color': max_aqi['Color']},
@@ -62,13 +84,20 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             st.plotly_chart(fig, use_container_width=True)
 
         with col2:
-            st.metric("Air Quality Status", max_aqi['Category'])
-            st.markdown(f"**Dominant Pollutant:** {max_aqi['Gas']}")
+            st.metric(t('air_quality_status'), max_aqi['CategoryTranslated'])
+            st.markdown(f"**{t('dominant_pollutant')}:** {max_aqi['Gas']}")
 
             # AQI breakdown by gas
             df_aqi = pd.DataFrame(aqi_data)
-            fig_bar = px.bar(df_aqi, x='Gas', y='AQI', color='Category',
+            fig_bar = px.bar(df_aqi, x='Gas', y='AQI', color='CategoryTranslated',
                             color_discrete_map={
+                                t('aqi_good'): '#00E400',
+                                t('aqi_moderate'): '#FFFF00',
+                                t('aqi_unhealthy_sensitive'): '#FF7E00',
+                                t('aqi_unhealthy'): '#FF0000',
+                                t('aqi_very_unhealthy'): '#8F3F97',
+                                t('aqi_hazardous'): '#7E0023',
+                                # Fallback for English categories
                                 'Good': '#00E400',
                                 'Moderate': '#FFFF00',
                                 'Unhealthy for Sensitive': '#FF7E00',
@@ -76,20 +105,20 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                                 'Very Unhealthy': '#8F3F97',
                                 'Hazardous': '#7E0023'
                             },
-                            title="AQI by Pollutant")
+                            title=t('aqi_by_pollutant'))
             fig_bar.update_layout(height=200, showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col3:
             # Health recommendations
-            st.info("**Health Advice:**")
+            st.info(f"**{t('health_advice')}:**")
             aqi_info = validator.calculate_aqi(max_aqi['Gas'],
                                               pollution_data[max_aqi['Gas']]['statistics']['max'])
             st.write(aqi_info['health_implications'])
 
 def create_health_risk_panel(pollution_data: Dict, validator) -> None:
     """Create health risk assessment panel"""
-    st.subheader("🏥 Health Risk Assessment")
+    st.subheader(f"🏥 {t('health_risk_assessment')}")
 
     risk_info = validator.calculate_health_risk_index(pollution_data)
 
@@ -101,7 +130,7 @@ def create_health_risk_panel(pollution_data: Dict, validator) -> None:
         <div style="text-align: center; padding: 20px; background-color: {risk_info['color']}20;
                     border: 2px solid {risk_info['color']}; border-radius: 10px;">
             <h2 style="color: {risk_info['color']}; margin: 0;">{risk_info['risk_level']}</h2>
-            <p style="margin: 5px 0;">Risk Score: {risk_info['overall_risk']:.0f}/100</p>
+            <p style="margin: 5px 0;">{t('risk_score')}: {risk_info['overall_risk']:.0f}/100</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -109,24 +138,24 @@ def create_health_risk_panel(pollution_data: Dict, validator) -> None:
         # Risk by pollutant
         if risk_info['gas_risks']:
             risk_df = pd.DataFrame([
-                {'Pollutant': gas, 'Risk Score': score}
+                {t('pollutant'): gas, t('risk_score'): score}
                 for gas, score in risk_info['gas_risks'].items()
             ])
-            fig = px.bar(risk_df, x='Risk Score', y='Pollutant', orientation='h',
-                        color='Risk Score', color_continuous_scale='RdYlGn_r',
-                        title="Risk by Pollutant")
+            fig = px.bar(risk_df, x=t('risk_score'), y=t('pollutant'), orientation='h',
+                        color=t('risk_score'), color_continuous_scale='RdYlGn_r',
+                        title=t('risk_by_pollutant'))
             fig.update_layout(height=200, showlegend=False)
             st.plotly_chart(fig, use_container_width=True)
 
     with col3:
         # Recommendations
-        st.markdown("**📋 Recommendations:**")
+        st.markdown(f"**📋 {t('recommendations')}:**")
         for rec in risk_info['recommendations']:
             st.write(f"• {rec}")
 
 def create_data_quality_panel(pollution_data: Dict, validator) -> None:
     """Create data quality indicators panel"""
-    st.subheader("📊 Data Quality Indicators")
+    st.subheader(f"📊 {t('data_quality')}")
 
     quality_scores = {}
     for gas, data in pollution_data.items():
@@ -151,20 +180,20 @@ def create_data_quality_panel(pollution_data: Dict, validator) -> None:
         # Display quality heatmap
         fig = go.Figure(data=go.Heatmap(
             z=quality_df[['Spatial', 'Temporal', 'Validity', 'Wind Sync']].values,
-            x=['Spatial Coverage', 'Temporal Accuracy', 'Data Validity', 'Wind Sync'],
+            x=[t('spatial_coverage'), t('temporal_accuracy'), t('measurement_validity'), t('wind_sync')],
             y=quality_df['Gas'].values,
             colorscale='RdYlGn',
             text=quality_df[['Spatial', 'Temporal', 'Validity', 'Wind Sync']].values,
             texttemplate='%{text:.0f}',
             textfont={"size": 10},
-            colorbar=dict(title="Quality Score")
+            colorbar=dict(title=t('quality_score'))
         ))
 
         fig.update_layout(
-            title="Data Quality Matrix",
+            title=t('data_quality_matrix'),
             height=200 + len(quality_scores) * 30,
-            xaxis_title="Quality Metric",
-            yaxis_title="Pollutant"
+            xaxis_title=t('quality_metric'),
+            yaxis_title=t('pollutant')
         )
 
         st.plotly_chart(fig, use_container_width=True)
@@ -174,20 +203,20 @@ def create_data_quality_panel(pollution_data: Dict, validator) -> None:
         col1, col2, col3, col4 = st.columns(4)
 
         with col1:
-            st.metric("Average Quality", f"{avg_quality:.0f}%")
+            st.metric(t('average_quality'), f"{avg_quality:.0f}%")
         with col2:
             best_quality = quality_df.loc[quality_df['Overall'].idxmax()]
-            st.metric("Best Quality", f"{best_quality['Gas']}: {best_quality['Overall']:.0f}%")
+            st.metric(t('best_quality'), f"{best_quality['Gas']}: {best_quality['Overall']:.0f}%")
         with col3:
             worst_quality = quality_df.loc[quality_df['Overall'].idxmin()]
-            st.metric("Needs Attention", f"{worst_quality['Gas']}: {worst_quality['Overall']:.0f}%")
+            st.metric(t('needs_attention'), f"{worst_quality['Gas']}: {worst_quality['Overall']:.0f}%")
         with col4:
             high_quality_count = len(quality_df[quality_df['Overall'] >= 80])
-            st.metric("High Quality", f"{high_quality_count}/{len(quality_df)} gases")
+            st.metric(t('high_quality'), f"{high_quality_count}/{len(quality_df)} {t('gases')}")
 
 def create_insights_panel(pollution_data: Dict, city: str, validator) -> None:
     """Create intelligent insights panel"""
-    st.subheader("💡 Intelligent Insights")
+    st.subheader(f"💡 {t('intelligent_insights')}")
 
     insights = validator.generate_data_insights(pollution_data, city)
 
@@ -198,12 +227,12 @@ def create_insights_panel(pollution_data: Dict, city: str, validator) -> None:
             with cols[i % 2]:
                 st.info(insight)
     else:
-        st.info("No significant patterns detected in current data")
+        st.info(t('no_patterns_detected'))
 
     # Add trend analysis
-    with st.expander("📈 Detailed Trend Analysis"):
+    with st.expander(f"📈 {t('detailed_trend_analysis')}"):
         # Correlation analysis
-        st.write("**Pollutant Correlations:**")
+        st.write(f"**{t('pollutant_correlations')}:**")
 
         correlation_data = []
         gases = list(pollution_data.keys())
@@ -218,17 +247,17 @@ def create_insights_panel(pollution_data: Dict, city: str, validator) -> None:
                     viol2 = pollution_data[gas2]['statistics']['max'] > thresh2
 
                     if viol1 and viol2:
-                        correlation_data.append(f"• {gas1} and {gas2} both elevated - possible common source")
+                        correlation_data.append(f"• {gas1} & {gas2} {t('both_elevated')}")
 
         if correlation_data:
             for corr in correlation_data:
                 st.write(corr)
         else:
-            st.write("No significant correlations detected")
+            st.write(t('no_correlations_detected'))
 
 def create_historical_comparison(pollution_data: Dict) -> None:
     """Create WHO standards comparison view"""
-    st.subheader("📊 Compliance with WHO Air Quality Standards")
+    st.subheader(f"📊 {t('who_compliance')}")
 
     # Compare current satellite measurements against WHO 2021 guidelines
     comparison_data = []
@@ -244,11 +273,11 @@ def create_historical_comparison(pollution_data: Dict) -> None:
 
             comparison_data.append({
                 'Gas': gas,
-                'Peak Level': max_val,
-                'Average Level': mean_val,
-                'WHO Guideline': threshold,
-                'Peak % of Limit': max_compliance,
-                'Status': '🔴 Violation' if max_val > threshold else '🟢 Compliant'
+                t('peak_level'): max_val,
+                t('average_level'): mean_val,
+                t('who_guideline'): threshold,
+                t('peak_percent_limit'): max_compliance,
+                t('status'): f"🔴 {t('violation')}" if max_val > threshold else f"🟢 {t('compliant')}"
             })
 
     if comparison_data:
@@ -258,35 +287,35 @@ def create_historical_comparison(pollution_data: Dict) -> None:
         fig = go.Figure()
 
         fig.add_trace(go.Bar(
-            name='Peak Concentration',
+            name=t('peak_concentration'),
             x=df['Gas'],
-            y=df['Peak Level'],
+            y=df[t('peak_level')],
             marker_color='#ef4444',
-            text=df['Peak % of Limit'].round(0),
+            text=df[t('peak_percent_limit')].round(0),
             texttemplate='%{text}%',
             textposition='outside'
         ))
         fig.add_trace(go.Bar(
-            name='Spatial Average',
+            name=t('spatial_average'),
             x=df['Gas'],
-            y=df['Average Level'],
+            y=df[t('average_level')],
             marker_color='#3b82f6'
         ))
         fig.add_trace(go.Scatter(
-            name='WHO 2021 Guideline',
+            name=t('who_guideline'),
             x=df['Gas'],
-            y=df['WHO Guideline'],
+            y=df[t('who_guideline')],
             mode='lines+markers',
             marker=dict(color='#22c55e', size=12, symbol='line-ew'),
             line=dict(color='#22c55e', width=3, dash='dash')
         ))
 
         fig.update_layout(
-            title="Current Satellite Measurements vs WHO 2021 Air Quality Guidelines",
+            title=t('current_vs_who'),
             barmode='group',
             height=350,
-            xaxis_title="Pollutant Gas",
-            yaxis_title="Concentration (Column Density)",
+            xaxis_title=t('pollutant_gas'),
+            yaxis_title=t('concentration'),
             showlegend=True,
             legend=dict(
                 orientation="h",
@@ -300,8 +329,8 @@ def create_historical_comparison(pollution_data: Dict) -> None:
         st.plotly_chart(fig, use_container_width=True)
 
         # Add compliance summary
-        violations = df[df['Status'].str.contains('Violation')]
+        violations = df[df[t('status')].str.contains(t('violation'))]
         if len(violations) > 0:
-            st.warning(f"⚠️ **{len(violations)} pollutant(s) exceeding WHO guidelines**: {', '.join(violations['Gas'].tolist())}")
+            st.warning(f"⚠️ **{len(violations)} {t('pollutants_exceeding')}**: {', '.join(violations['Gas'].tolist())}")
         else:
-            st.success("✅ All pollutants within WHO 2021 air quality guidelines")
+            st.success(f"✅ {t('all_within_guidelines')}")

@@ -148,7 +148,7 @@ def initialize_services():
     try:
         services['fetcher'] = SatelliteDataFetcher()
     except Exception as e:
-        st.warning(f"Satellite data service unavailable: {str(e)}")
+        st.warning(f"{t('satellite_unavailable')}: {str(e)}")
         services['fetcher'] = None
 
     try:
@@ -158,25 +158,25 @@ def initialize_services():
             vertex_location=vertex_location
         )
     except Exception as e:
-        st.warning(f"AI analysis service unavailable: {str(e)}")
+        st.warning(f"{t('ai_unavailable')}: {str(e)}")
         services['analyzer'] = None
 
     try:
         services['visualizer'] = MapVisualizer()
     except Exception as e:
-        st.warning(f"Map visualization service unavailable: {str(e)}")
+        st.warning(f"{t('map_unavailable')}: {str(e)}")
         services['visualizer'] = None
 
     try:
         services['validator'] = DataValidator()
     except Exception as e:
-        st.warning(f"Data validation service unavailable: {str(e)}")
+        st.warning(f"{t('validation_unavailable')}: {str(e)}")
         services['validator'] = None
 
     try:
         services['recorder'] = ViolationRecorder()
     except Exception as e:
-        st.warning(f"Violation recording service unavailable: {str(e)}")
+        st.warning(f"{t('recorder_unavailable')}: {str(e)}")
         services['recorder'] = None
 
     return (services.get('fetcher'), services.get('analyzer'),
@@ -249,7 +249,7 @@ def create_sidebar():
                 ksa_tz = pytz.timezone(config.TIMEZONE)
                 last_update_ksa = ksa_tz.localize(last_update_dt)
                 next_refresh = last_update_ksa + timedelta(hours=refresh_hours)
-                st.caption(f"Next: {next_refresh.strftime('%H:%M:%S KSA')}")
+                st.caption(f"{t('next_refresh')}: {next_refresh.strftime('%H:%M:%S KSA')}")
 
         if st.button(f"🔄 {t('refresh_now')}", use_container_width=True, type="primary"):
             st.session_state.pollution_data = {}
@@ -263,7 +263,7 @@ def create_sidebar():
         st.divider()
         with st.expander(f"🔧 {t('connection_diagnostics')}"):
             if st.button(t('test_connection'), use_container_width=True):
-                with st.spinner("Testing connection..."):
+                with st.spinner(t('testing_connection')):
                     try:
                         import ee
                         # Test basic connection
@@ -326,8 +326,8 @@ def fetch_pollution_data(city: str, days_back: int):
     fetcher, analyzer, _, _, _ = initialize_services()
 
     if not fetcher:
-        st.error("Cannot connect to satellite data service")
-        st.info("Check Earth Engine authentication in sidebar diagnostics.")
+        st.error(t('cannot_connect_satellite'))
+        st.info(t('check_earth_engine'))
         return {}
 
     all_data = {}
@@ -338,7 +338,7 @@ def fetch_pollution_data(city: str, days_back: int):
 
     gases = list(config.GAS_PRODUCTS.keys())
     for i, gas in enumerate(gases):
-        status.text(f"Retrieving {gas} data...")
+        status.text(t('retrieving_data').format(gas=gas))
         progress.progress((i + 1) / len(gases))
 
         try:
@@ -355,12 +355,12 @@ def fetch_pollution_data(city: str, days_back: int):
     status.empty()
 
     if errors and len(errors) == len(gases):
-        st.error("Failed to fetch data for all gases")
-        with st.expander("Error Details"):
+        st.error(t('failed_fetch_all'))
+        with st.expander(t('error')):
             for error in errors:
                 st.write(f"• {error}")
     elif errors:
-        with st.expander(f"Partial data ({len(errors)} gases unavailable)"):
+        with st.expander(t('partial_data').format(count=len(errors))):
             for error in errors:
                 st.write(f"• {error}")
 
@@ -374,7 +374,7 @@ def display_metrics(pollution_data: Dict):
     valid_data = {gas: data for gas, data in pollution_data.items() if data.get('success')}
 
     if not valid_data:
-        st.warning("No pollution data available. Please try again later.")
+        st.warning(t('no_data_available'))
         return
 
     # Create columns based on valid data count
@@ -388,35 +388,35 @@ def display_metrics(pollution_data: Dict):
 
             max_val = data['statistics']['max']
             if max_val >= critical:
-                status = "🔴 Critical"
+                status = f"🔴 {t('critical')}"
                 delta_color = "inverse"
             elif max_val >= threshold:
-                status = "🟡 Moderate"
+                status = f"🟡 {t('moderate')}"
                 delta_color = "normal"
             else:
-                status = "🟢 Normal"
+                status = f"🟢 {t('normal')}"
                 delta_color = "normal"
 
             st.metric(
                 label=f"{gas} ({config.GAS_PRODUCTS[gas]['name']})",
                 value=f"{max_val:.2f}",
-                delta=f"{status} | Threshold: {threshold:.1f}",
+                delta=f"{status} | {t('threshold')}: {threshold:.1f}",
                 delta_color=delta_color
             )
 
-            with st.expander("Details"):
-                st.write(f"**Mean:** {data['statistics']['mean']:.2f}")
-                st.write(f"**Min:** {data['statistics']['min']:.2f}")
-                st.write(f"**Unit:** {data['unit']}")
+            with st.expander(t('violation_details')):
+                st.write(f"**{t('mean')}:** {data['statistics']['mean']:.2f}")
+                st.write(f"**{t('min')}:** {data['statistics']['min']:.2f}")
+                st.write(f"**{t('type')}:** {data['unit']}")
 
                 # Show data age if available
                 if data.get('data_age_label'):
                     age_emoji = "🕐" if data.get('days_old', 0) > 0 else "✨"
-                    st.caption(f"{age_emoji} Data from: {data.get('data_age_label')}")
+                    st.caption(f"{age_emoji} {t('data_from')}: {data.get('data_age_label')}")
 
                 if max_val >= threshold:
                     exceeded = ((max_val - threshold) / threshold * 100)
-                    st.error(f"Exceeded by {exceeded:.1f}%")
+                    st.error(f"{t('exceeded_by')} {exceeded:.1f}%")
 
 def display_violations(pollution_data: Dict, city: str):
     """Display WHO threshold violations with AI-powered source attribution."""
@@ -471,24 +471,24 @@ def display_violations(pollution_data: Dict, city: str):
                 col1, col2 = st.columns([2, 1])
 
                 with col1:
-                    st.error(f"**{violation['gas']} Violation Detected**")
-                    st.write(f"**Severity:** {violation['severity'].upper()}")
-                    st.write(f"**Value:** {violation['max_value']:.2f} {violation['unit']}")
-                    st.write(f"**Threshold:** {violation['threshold']:.1f} {violation['unit']}")
-                    st.write(f"**Exceeded by:** {violation['percentage_over']:.1f}%")
+                    st.error(f"**{violation['gas']} {t('violation_detected')}**")
+                    st.write(f"**{t('severity')}:** {violation['severity'].upper()}")
+                    st.write(f"**{t('value')}:** {violation['max_value']:.2f} {violation['unit']}")
+                    st.write(f"**{t('threshold')}:** {violation['threshold']:.1f} {violation['unit']}")
+                    st.write(f"**{t('exceeded_by')}:** {violation['percentage_over']:.1f}%")
 
                     # Add wind information
                     if violation['wind'].get('success'):
-                        st.write(f"**Wind:** {violation['wind']['speed_ms']:.1f} m/s from {violation['wind']['direction_cardinal']} ({violation['wind']['direction_deg']:.0f}°)")
-                        st.write(f"**Wind Confidence:** {violation['wind']['confidence']:.0f}%")
+                        st.write(f"**{t('wind')}:** {violation['wind']['speed_ms']:.1f} m/s {t('wind_from')} {violation['wind']['direction_cardinal']} ({violation['wind']['direction_deg']:.0f}°)")
+                        st.write(f"**{t('wind_confidence')}:** {violation['wind']['confidence']:.0f}%")
 
                     # Display hotspot location
                     if violation.get('hotspot'):
-                        st.write(f"**Hotspot Location:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
+                        st.write(f"**{t('hotspot_location')}:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
 
                 with col2:
-                    st.write("**🤖 AI Source Analysis:**")
-                    with st.spinner("Analyzing pollution source..."):
+                    st.write(f"**🤖 {t('ai_analysis')}:**")
+                    with st.spinner(t('analyzing_source')):
                         import tempfile
 
                         temp_map = visualizer.create_pollution_map(
@@ -514,7 +514,7 @@ def display_violations(pollution_data: Dict, city: str):
                     # Display full analysis in an expandable section
                     if len(analysis) > 300:
                         st.info(analysis[:300] + "...")
-                        with st.expander("View Full Analysis"):
+                        with st.expander(t('view_full_analysis')):
                             st.write(analysis)
                     else:
                         st.info(analysis)
@@ -527,14 +527,14 @@ def display_violations(pollution_data: Dict, city: str):
                         )
 
                         if existing_id:
-                            st.caption(f"📁 Already saved: {existing_id}")
+                            st.caption(f"📁 {t('already_saved')}: {existing_id}")
                         else:
-                            with st.spinner("Saving violation record..."):
+                            with st.spinner(t('saving_violation')):
                                 violation_id = recorder.save_violation(violation, analysis, temp_html_path)
                                 if violation_id:
-                                    st.success(f"Saved: {violation_id}")
+                                    st.success(f"{t('saved')}: {violation_id}")
                                 else:
-                                    st.warning("Save failed")
+                                    st.warning(t('save_failed'))
 
                     try:
                         os.remove(temp_html_path)
@@ -545,19 +545,19 @@ def display_violations(pollution_data: Dict, city: str):
 
                 # Add factory list if available
                 if violation.get('nearby_factories'):
-                    with st.expander(f"📍 Nearby Industrial Facilities ({len(violation['nearby_factories'])} found)"):
+                    with st.expander(f"📍 {t('nearby_facilities')} ({len(violation['nearby_factories'])} {t('found')})"):
                         for factory in violation['nearby_factories'][:5]:
                             col1, col2, col3 = st.columns([2, 1, 1])
                             with col1:
                                 st.write(f"**{factory['name']}**")
-                                st.write(f"Type: {factory['type']}")
+                                st.write(f"{t('type')}: {factory['type']}")
                             with col2:
-                                st.write(f"Distance: {factory['distance_km']:.1f} km")
+                                st.write(f"{t('distance')}: {factory['distance_km']:.1f} {t('km')}")
                                 if factory.get('likely_upwind'):
-                                    st.write("⚠️ **UPWIND**")
+                                    st.write(f"⚠️ **{t('upwind')}**")
                             with col3:
-                                st.write(f"Confidence: {factory.get('confidence', 0):.0f}%")
-                                st.write(f"Emissions: {', '.join(factory['emissions'][:2])}")
+                                st.write(f"{t('confidence')}: {factory.get('confidence', 0):.0f}%")
+                                st.write(f"{t('emissions')}: {', '.join(factory['emissions'][:2])}")
 
                 st.divider()
     else:
@@ -575,7 +575,7 @@ def display_map(pollution_data: Dict, city: str):
                       if data.get('success')]
 
     if not available_gases:
-        st.warning("No pollution data available to display on the map")
+        st.warning(t('no_map_data'))
         return
 
     gases_with_pixels = [gas for gas in available_gases
@@ -595,10 +595,10 @@ def display_map(pollution_data: Dict, city: str):
         default_index = available_gases.index(violation_gas)
 
     selected_gas = st.selectbox(
-        "Select Gas to Display:",
+        t('select_gas_display'),
         available_gases,
         index=default_index,
-        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''}"
+        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ ' + t('violation').upper() if x == violation_gas else ''}"
     )
 
     if selected_gas:
@@ -607,50 +607,50 @@ def display_map(pollution_data: Dict, city: str):
         # Display comprehensive data info
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric(f"{selected_gas} Max",
+            st.metric(f"{selected_gas} {t('max')}",
                      f"{gas_data['statistics']['max']:.2f}",
                      f"{gas_data['unit']}")
         with col2:
-            st.metric(f"{selected_gas} Mean",
+            st.metric(f"{selected_gas} {t('mean')}",
                      f"{gas_data['statistics']['mean']:.2f}",
-                     f"Min: {gas_data['statistics']['min']:.2f}")
+                     f"{t('min')}: {gas_data['statistics']['min']:.2f}")
         with col3:
             if gas_data.get('wind', {}).get('success'):
                 wind = gas_data['wind']
-                st.metric("Wind",
+                st.metric(t('wind'),
                          f"{wind['speed_ms']:.1f} m/s",
-                         f"From {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
+                         f"{t('wind_from')} {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
             else:
-                st.metric("Wind", "No data", "—")
+                st.metric(t('wind'), t('no_data'), "—")
         with col4:
             # Show pixel count if available
             pixel_count = gas_data.get('statistics', {}).get('pixel_count', 0)
-            st.metric("Data Points",
+            st.metric(t('data_quality'),
                      pixel_count,
-                     "pixels" if pixel_count > 0 else "No spatial data")
+                     t('pixels') if pixel_count > 0 else t('no_data'))
 
         # Show detailed timing information
-        with st.expander("🕐 Detailed Timing Information (All times in KSA)", expanded=True):
+        with st.expander(f"🕐 {t('detailed_timing')}", expanded=True):
             col1, col2, col3 = st.columns(3)
 
             # Satellite observation time
             with col1:
                 sat_time_ksa = gas_data.get('timestamp_ksa', 'N/A')
                 if hasattr(sat_time_ksa, 'strftime'):
-                    st.info(f"**🛰️ Satellite Pass:**\n{sat_time_ksa.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+                    st.info(f"**🛰️ {t('satellite_pass')}:**\n{sat_time_ksa.strftime('%Y-%m-%d %H:%M:%S KSA')}")
                 else:
-                    st.info(f"**🛰️ Satellite Pass:**\n{sat_time_ksa}")
+                    st.info(f"**🛰️ {t('satellite_pass')}:**\n{sat_time_ksa}")
 
             # Wind observation time
             with col2:
                 if gas_data.get('wind', {}).get('timestamp_ksa'):
                     wind_time = gas_data['wind']['timestamp_ksa']
                     if hasattr(wind_time, 'strftime'):
-                        st.info(f"**💨 Wind Reading:**\n{wind_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+                        st.info(f"**💨 {t('wind_reading')}:**\n{wind_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
                     else:
-                        st.info(f"**💨 Wind Reading:**\n{wind_time}")
+                        st.info(f"**💨 {t('wind_reading')}:**\n{wind_time}")
                 else:
-                    st.info("**💨 Wind Reading:**\nNo wind data")
+                    st.info(f"**💨 {t('wind_reading')}:**\n{t('no_wind_data')}")
 
             # Time synchronization info
             with col3:
@@ -658,14 +658,14 @@ def display_map(pollution_data: Dict, city: str):
                     time_diff = gas_data['wind']['time_difference_minutes']
                     confidence = gas_data['wind'].get('confidence', 0)
                     if time_diff < 30:
-                        quality = "🟢 Excellent"
+                        quality = f"🟢 {t('excellent')}"
                     elif time_diff < 60:
-                        quality = "🟡 Good"
+                        quality = f"🟡 {t('good')}"
                     else:
-                        quality = "🔴 Poor"
-                    st.info(f"**⏱️ Sync Quality:**\n{quality}\nΔt: {time_diff:.0f} min\nConfidence: {confidence:.0f}%")
+                        quality = f"🔴 {t('poor')}"
+                    st.info(f"**⏱️ {t('sync_quality')}:**\n{quality}\nΔt: {time_diff:.0f} min\n{t('confidence')}: {confidence:.0f}%")
                 else:
-                    st.info("**⏱️ Sync Quality:**\nNo sync data")
+                    st.info(f"**⏱️ {t('sync_quality')}:**\n{t('no_sync_data')}")
 
         # Find hotspot
         hotspot = analyzer.find_hotspot(gas_data)
@@ -749,20 +749,20 @@ def display_trends(pollution_data: Dict):
 
             if violation_count > 0 or safe_count > 0:
                 pie_data = pd.DataFrame({
-                    'Status': ['Within Limits', 'Violation'],
+                    'Status': [t('within_limits'), t('violation')],
                     'Count': [safe_count, violation_count]
                 })
 
                 fig_pie = px.pie(pie_data, values='Count', names='Status',
-                             title="🎯 Violation Summary",
+                             title=f"🎯 {t('violation_summary')}",
                              color='Status',
-                             color_discrete_map={'Within Limits': '#10b981', 'Violation': '#ef4444'})
+                             color_discrete_map={t('within_limits'): '#10b981', t('violation'): '#ef4444'})
 
                 st.plotly_chart(fig_pie, use_container_width=True)
 
                 if violation_count > 0:
                     violating_gases = [row['Gas'] for row in trend_data if row['Max (% of Threshold)'] > 100]
-                    st.warning(f"⚠️ Violations detected: {', '.join(violating_gases)}")
+                    st.warning(f"⚠️ {t('violations_detected_gases')}: {', '.join(violating_gases)}")
 
         with col2:
             # Quick summary metrics
@@ -770,11 +770,11 @@ def display_trends(pollution_data: Dict):
             for row in trend_data:
                 pct = row['Max (% of Threshold)']
                 if pct > 100:
-                    st.markdown(f"🔴 **{row['Gas']}**: {pct:.0f}% of threshold (VIOLATION)")
+                    st.markdown(f"🔴 **{row['Gas']}**: {pct:.0f}% {t('of_threshold_label')} ({t('violation').upper()})")
                 elif pct > 80:
-                    st.markdown(f"🟡 **{row['Gas']}**: {pct:.0f}% of threshold (Warning)")
+                    st.markdown(f"🟡 **{row['Gas']}**: {pct:.0f}% {t('of_threshold_label')} ({t('warning_label')})")
                 else:
-                    st.markdown(f"🟢 **{row['Gas']}**: {pct:.0f}% of threshold (Normal)")
+                    st.markdown(f"🟢 **{row['Gas']}**: {pct:.0f}% {t('of_threshold_label')} ({t('normal_label')})")
 
         st.divider()
 
@@ -818,7 +818,7 @@ def display_trends(pollution_data: Dict):
 
                         # Add bars for Min, Mean, Max
                         fig.add_trace(go.Bar(
-                            x=['Min', 'Mean', 'Max'],
+                            x=[t('min_label_chart'), t('mean_label_chart'), t('max_label_chart')],
                             y=[min_val, mean_val, max_val],
                             marker_color=['#3b82f6', '#8b5cf6', status_color],
                             text=[f'{min_val:.2f}', f'{mean_val:.2f}', f'{max_val:.2f}'],
@@ -831,7 +831,7 @@ def display_trends(pollution_data: Dict):
                             y=threshold,
                             line_dash="dash",
                             line_color="orange",
-                            annotation_text=f"Threshold: {threshold:.1f}",
+                            annotation_text=f"{t('threshold_label')}: {threshold:.1f}",
                             annotation_position="right"
                         )
 
@@ -841,7 +841,7 @@ def display_trends(pollution_data: Dict):
                                 y=critical,
                                 line_dash="dot",
                                 line_color="red",
-                                annotation_text=f"Critical: {critical:.1f}",
+                                annotation_text=f"{t('critical_label')}: {critical:.1f}",
                                 annotation_position="right"
                             )
 
@@ -923,7 +923,7 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
             continue
 
     if not df_data:
-        st.info("Not enough data for trend analysis")
+        st.info(t('not_enough_data'))
         return
 
     df = pd.DataFrame(df_data)
@@ -973,8 +973,8 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
             x='date',
             y='count',
             color='gas',
-            title='Violations by Gas Type Over Time',
-            labels={'date': 'Date', 'count': 'Violations', 'gas': 'Gas'},
+            title=t('violations_by_gas_time'),
+            labels={'date': 'Date', 'count': t('violations'), 'gas': 'Gas'},
             color_discrete_map={
                 'NO2': '#ef4444',
                 'SO2': '#f59e0b',
@@ -995,7 +995,7 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
                 gas_totals,
                 values='count',
                 names='gas',
-                title='Total Violations by Gas',
+                title=t('total_violations_gas'),
                 color='gas',
                 color_discrete_map={
                     'NO2': '#ef4444',
@@ -1016,8 +1016,8 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
                 avg_exceed,
                 x='gas',
                 y='avg_percentage',
-                title='Avg Threshold Exceedance by Gas',
-                labels={'gas': 'Gas', 'avg_percentage': 'Avg % Over Threshold'},
+                title=t('avg_exceedance_gas'),
+                labels={'gas': 'Gas', 'avg_percentage': t('avg_percent_threshold')},
                 color='avg_percentage',
                 color_continuous_scale='Reds'
             )
@@ -1034,8 +1034,8 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
             x='date',
             y='count',
             color='severity',
-            title='Violations by Severity Over Time',
-            labels={'date': 'Date', 'count': 'Violations', 'severity': 'Severity'},
+            title=t('violations_severity_time'),
+            labels={'date': 'Date', 'count': t('violations'), 'severity': t('severity')},
             color_discrete_map={
                 'critical': '#dc2626',
                 'moderate': '#f59e0b',
@@ -1054,7 +1054,7 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
                 severity_totals,
                 values='count',
                 names='severity',
-                title='Violations by Severity',
+                title=t('violations_by_severity'),
                 color='severity',
                 color_discrete_map={
                     'critical': '#dc2626',
@@ -1073,9 +1073,9 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
             critical_rate = (critical_count / total * 100) if total > 0 else 0
             moderate_rate = (moderate_count / total * 100) if total > 0 else 0
 
-            st.markdown("### Severity Breakdown")
-            st.metric("Critical Rate", f"{critical_rate:.1f}%", delta=f"{critical_count} violations")
-            st.metric("Moderate Rate", f"{moderate_rate:.1f}%", delta=f"{moderate_count} violations")
+            st.markdown(f"### {t('severity_breakdown')}")
+            st.metric(t('critical_rate'), f"{critical_rate:.1f}%", delta=f"{critical_count} {t('violations')}")
+            st.metric(t('moderate_rate'), f"{moderate_rate:.1f}%", delta=f"{moderate_count} {t('violations')}")
 
 
 def display_violation_history(city: str):
@@ -1083,32 +1083,31 @@ def display_violation_history(city: str):
     _, _, visualizer, _, recorder = initialize_services()
 
     if not recorder:
-        st.warning("Violation recorder not available")
+        st.warning(t('recorder_unavailable_msg'))
         return
 
     # Show storage info
     storage_info = recorder.get_storage_info()
 
-    with st.expander("ℹ️ Storage Information", expanded=False):
+    with st.expander(f"ℹ️ {t('storage_info')}", expanded=False):
         if storage_info.get('use_firestore'):
-            st.success("☁️ **Google Cloud Firestore** - Persistent cloud storage enabled!")
+            st.success(f"☁️ **Google Cloud Firestore** - {t('cloud_storage')}")
             st.markdown(f"""
-            - **Project:** `{storage_info.get('project_id')}`
-            - **Collection:** `{storage_info.get('collection_name')}`
-            - **Status:** {'✅ Connected & Writable' if storage_info.get('writable') else '❌ Not writable'}
-            - **Map Storage:** ✅ Stored in Firestore (HTML embedded)
+            - **{t('project')}:** `{storage_info.get('project_id')}`
+            - **{t('collection')}:** `{storage_info.get('collection_name')}`
+            - **{t('status')}:** {'✅ ' + t('connected_writable') if storage_info.get('writable') else '❌ ' + t('not_writable')}
+            - **{t('map_storage')}:** ✅ {t('stored_firestore')}
 
-            Violations and heatmaps are stored permanently in Google Cloud.
+            {t('violations_stored')}
             """)
         else:
-            st.warning("📁 **Local Storage** - Records may be lost on app restart")
+            st.warning(f"📁 **{t('local_storage')}**")
             st.markdown(f"""
-            **Note:** Using local file storage. On **Streamlit Cloud**, storage is **ephemeral** -
-            records may be cleared when the app restarts or redeploys.
+            **{t('info')}:** {t('local_storage_note')}
 
-            - **Path:** `{storage_info.get('local_path')}`
-            - **Status:** {'✅ Writable' if storage_info.get('writable') else '❌ Not writable'}
-            - **Firestore available:** {'Yes' if storage_info.get('firestore_available') else 'No (install google-cloud-firestore)'}
+            - **{t('path')}:** `{storage_info.get('local_path')}`
+            - **{t('status')}:** {'✅ ' + t('connected_writable') if storage_info.get('writable') else '❌ ' + t('not_writable')}
+            - **{t('firestore_available')}:** {t('yes') if storage_info.get('firestore_available') else t('no') + ' (' + t('install_firestore') + ')'}
             """)
 
     # Get statistics
@@ -1117,29 +1116,29 @@ def display_violation_history(city: str):
     # Display summary statistics
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        st.metric("Total Violations", stats['total_violations'])
+        st.metric(t('total_violations'), stats['total_violations'])
     with col2:
         if stats['by_severity']:
             most_severe = max(stats['by_severity'].keys(), key=lambda x: stats['by_severity'][x])
-            st.metric("Most Common Severity", most_severe.capitalize())
+            st.metric(t('most_common_severity'), most_severe.capitalize())
         else:
-            st.metric("Most Common Severity", "N/A")
+            st.metric(t('most_common_severity'), "N/A")
     with col3:
         if stats['by_gas']:
             most_frequent = max(stats['by_gas'].keys(), key=lambda x: stats['by_gas'][x])
-            st.metric("Most Frequent Gas", most_frequent)
+            st.metric(t('most_frequent_gas'), most_frequent)
         else:
-            st.metric("Most Frequent Gas", "N/A")
+            st.metric(t('most_frequent_gas'), "N/A")
     with col4:
         if stats.get('date_range'):
-            st.metric("Records Since", stats['date_range']['oldest'].split()[0])
+            st.metric(t('records_since'), stats['date_range']['oldest'].split()[0])
         else:
-            st.metric("Records Since", "N/A")
+            st.metric(t('records_since'), "N/A")
 
     if stats['total_violations'] == 0:
-        st.info("No violations recorded yet. Violations are automatically saved when detected in the '⚠️ Violations' tab.")
+        st.info(t('no_violations_recorded'))
         st.markdown("---")
-        st.markdown("**💡 Tip:** Go to the **⚠️ Violations** tab to detect and auto-save any current violations.")
+        st.markdown(f"**💡 {t('tip')}:** {t('tip_violations')}")
         return
 
     # Get all violations for trend analysis (before filtering)
@@ -1154,36 +1153,36 @@ def display_violation_history(city: str):
     col1, col2, col3 = st.columns([2, 2, 1])
     with col1:
         gas_filter = st.selectbox(
-            "Filter by Gas",
-            ["All"] + list(stats['by_gas'].keys()),
+            t('filter_by_gas'),
+            [t('all')] + list(stats['by_gas'].keys()),
             key="history_gas_filter"
         )
     with col2:
-        limit = st.number_input("Show records", min_value=10, max_value=100, value=20, step=10)
+        limit = st.number_input(t('show_records'), min_value=10, max_value=100, value=20, step=10)
     with col3:
-        if st.button("🗑️ Clear All", type="secondary"):
+        if st.button(f"🗑️ {t('clear_all')}", type="secondary"):
             if st.session_state.get('confirm_clear'):
                 # Actually clear
                 records = recorder.get_all_violations(city=city)
                 for record in records:
                     recorder.delete_violation(record['id'])
-                st.success("All records cleared")
+                st.success(t('all_records_cleared'))
                 st.session_state.confirm_clear = False
                 st.rerun()
             else:
                 st.session_state.confirm_clear = True
-                st.warning("Click again to confirm deletion")
+                st.warning(t('click_to_confirm'))
 
     # Get filtered violations
     violations = recorder.get_all_violations(
         city=city,
-        gas=None if gas_filter == "All" else gas_filter,
+        gas=None if gas_filter == t('all') else gas_filter,
         limit=limit
     )
 
     # Display violations
     if violations:
-        st.subheader(f"📋 Showing {len(violations)} violation(s)")
+        st.subheader(f"📋 {t('showing_violations').format(count=len(violations))}")
 
         for record in violations:
             with st.expander(
@@ -1194,62 +1193,62 @@ def display_violation_history(city: str):
 
                 with col1:
                     # Violation details
-                    st.markdown(f"**Gas:** {record['gas_name']} ({record['gas']})")
-                    st.markdown(f"**Time:** {record['timestamp_ksa']}")
-                    st.markdown(f"**City:** {record['city']}")
-                    st.markdown(f"**Severity:** {record['severity'].upper()}")
-                    st.markdown(f"**Max Value:** {record['max_value']:.2f} {record['unit']}")
-                    st.markdown(f"**Threshold:** {record['threshold']:.1f} {record['unit']}")
-                    st.markdown(f"**Exceeded by:** {record['percentage_over']:.1f}%")
+                    st.markdown(f"**{t('pollutant')}:** {record['gas_name']} ({record['gas']})")
+                    st.markdown(f"**{t('time_label')}:** {record['timestamp_ksa']}")
+                    st.markdown(f"**{t('select_city')}:** {t(record['city'])}")
+                    st.markdown(f"**{t('severity')}:** {t(record['severity']).upper()}")
+                    st.markdown(f"**{t('max')}:** {record['max_value']:.2f} {record['unit']}")
+                    st.markdown(f"**{t('threshold')}:** {record['threshold']:.1f} {record['unit']}")
+                    st.markdown(f"**{t('exceeded_by')}:** {record['percentage_over']:.1f}%")
 
                     # Hotspot location
                     if record.get('hotspot'):
-                        st.markdown(f"**Hotspot:** ({record['hotspot']['lat']:.4f}, {record['hotspot']['lon']:.4f})")
+                        st.markdown(f"**{t('hotspot_location')}:** ({record['hotspot']['lat']:.4f}, {record['hotspot']['lon']:.4f})")
 
                     # Wind data
                     if record.get('wind', {}).get('success'):
                         wind = record['wind']
-                        st.markdown(f"**Wind:** {wind['speed_ms']:.1f} m/s from {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
+                        st.markdown(f"**{t('wind')}:** {wind['speed_ms']:.1f} m/s {t('wind_from')} {wind['direction_cardinal']} ({wind['direction_deg']:.0f}°)")
 
                 with col2:
                     # Show hotspot location
                     if record.get('hotspot'):
                         hotspot = record['hotspot']
-                        st.markdown(f"**📍 Hotspot:** [{hotspot['lat']:.4f}, {hotspot['lon']:.4f}](https://www.google.com/maps?q={hotspot['lat']},{hotspot['lon']})")
+                        st.markdown(f"**📍 {t('hotspot_location')}:** [{hotspot['lat']:.4f}, {hotspot['lon']:.4f}](https://www.google.com/maps?q={hotspot['lat']},{hotspot['lon']})")
 
                     # View heatmap button if map HTML exists
                     if record.get('map_html'):
-                        if st.button("🗺️ View Heatmap", key=f"view_map_{record['id']}", type="primary"):
+                        if st.button(f"🗺️ {t('view_heatmap')}", key=f"view_map_{record['id']}", type="primary"):
                             st.session_state[f"show_map_{record['id']}"] = not st.session_state.get(f"show_map_{record['id']}", False)
 
-                    if st.button("🗑️ Delete", key=f"delete_{record['id']}", type="secondary"):
+                    if st.button(f"🗑️ {t('delete')}", key=f"delete_{record['id']}", type="secondary"):
                         if recorder.delete_violation(record['id']):
-                            st.success("Record deleted")
+                            st.success(t('record_deleted'))
                             st.rerun()
                         else:
-                            st.error("Failed to delete record")
+                            st.error(t('failed_to_delete'))
 
                 # AI Analysis
-                st.markdown("**🤖 AI Analysis:**")
+                st.markdown(f"**🤖 {t('ai_analysis')}:**")
                 st.info(record['ai_analysis'])
 
                 # Factory list
                 if record.get('nearby_factories'):
-                    st.markdown(f"**📍 Nearby Factories ({len(record['nearby_factories'])}):**")
+                    st.markdown(f"**📍 {t('nearby_factories')} ({len(record['nearby_factories'])}):**")
                     for factory in record['nearby_factories'][:3]:
-                        upwind_marker = "⚠️ UPWIND" if factory.get('likely_upwind') else ""
-                        st.markdown(f"- {factory['name']} ({factory['distance_km']:.1f} km) {upwind_marker}")
+                        upwind_marker = f"⚠️ {t('upwind')}" if factory.get('likely_upwind') else ""
+                        st.markdown(f"- {factory['name']} ({factory['distance_km']:.1f} {t('km')}) {upwind_marker}")
 
                 # Display heatmap if toggled
                 if st.session_state.get(f"show_map_{record['id']}", False) and record.get('map_html'):
                     st.divider()
-                    st.subheader("🗺️ Violation Heatmap")
+                    st.subheader(f"🗺️ {t('pollution_heatmap')}")
                     import streamlit.components.v1 as components
                     components.html(record['map_html'], height=500, scrolling=True)
 
                     # Download button
                     st.download_button(
-                        label="📥 Download Map (HTML)",
+                        label=f"📥 {t('download_map')}",
                         data=record['map_html'],
                         file_name=f"{record['id']}_heatmap.html",
                         mime="text/html",
@@ -1257,7 +1256,7 @@ def display_violation_history(city: str):
                     )
 
     else:
-        st.info("No violation records found matching the filters")
+        st.info(t('no_records'))
 
 def main():
     """Main application entry point."""
@@ -1315,7 +1314,7 @@ def main():
         # Show info message if gases have different data ages
         if len(data_ages) > 1:
             max_age = max(data_ages)
-            st.info(f"ℹ️ **Note:** Some gases have data from different days due to cloud cover. Latest available data shown (up to {max_age} day{'s' if max_age != 1 else ''} old). Check individual gas details for specific dates.")
+            st.info(f"ℹ️ **{t('info')}:** {t('data_note_different_days').format(days=max_age)}")
 
         display_metrics(pollution_data)
 
@@ -1328,14 +1327,14 @@ def main():
                              data['statistics']['max'] >= config.GAS_THRESHOLDS.get(gas, {}).get('column_threshold', float('inf')))
 
         with col1:
-            st.metric("Total Gases Monitored", len(pollution_data))
+            st.metric(t('total_gases_monitored'), len(pollution_data))
         with col2:
-            st.metric("Violations Detected", violations_count)
+            st.metric(t('violations_detected'), violations_count)
         with col3:
             if pollution_data:
-                st.metric("Data Quality", "High" if all(d.get('success') for d in pollution_data.values()) else "Partial")
+                st.metric(t('data_quality_label'), t('high') if all(d.get('success') for d in pollution_data.values()) else t('partial'))
             else:
-                st.metric("Data Quality", "No Data")
+                st.metric(t('data_quality_label'), t('no_data_label'))
 
     with tab2:
         st.header(f"🌡️ {t('aqi_dashboard_header')}")
@@ -1371,7 +1370,7 @@ def main():
         create_insights_panel(pollution_data, city, validator)
 
         # Additional analytics
-        with st.expander("🔬 Advanced Analytics"):
+        with st.expander(f"🔬 {t('advanced_analytics')}"):
             st.subheader(t('data_validation_report'))
             for gas, data in pollution_data.items():
                 if data.get('success'):

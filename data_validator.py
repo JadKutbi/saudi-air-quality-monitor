@@ -9,8 +9,18 @@ import logging
 from datetime import datetime, timedelta
 import pytz
 import config
+from translations import get_text
 
 logger = logging.getLogger(__name__)
+
+
+def get_current_language():
+    """Get the current language from Streamlit session state, or default to English."""
+    try:
+        import streamlit as st
+        return st.session_state.get('language', 'en')
+    except Exception:
+        return 'en'
 
 class DataValidator:
     """Validate and quality-check pollution data"""
@@ -70,13 +80,14 @@ class DataValidator:
         }
 
         # Default AQI if gas not in breakpoints
+        lang = get_current_language()
         if gas not in aqi_breakpoints:
             return {
                 'aqi': None,
-                'category': 'Unknown',
+                'category': get_text('unknown', lang),
                 'color': '#808080',
-                'description': 'AQI calculation not available for this gas',
-                'health_implications': 'Refer to WHO guidelines'
+                'description': get_text('aqi_not_available', lang),
+                'health_implications': get_text('refer_who', lang)
             }
 
         # Find appropriate breakpoint
@@ -96,23 +107,24 @@ class DataValidator:
         # If concentration exceeds all breakpoints
         return {
             'aqi': 500,
-            'category': 'Hazardous',
+            'category': get_text('aqi_hazardous', lang),
             'color': '#7E0023',
-            'description': 'Emergency conditions',
-            'health_implications': 'Avoid outdoor activities. Close windows. Use air purifiers.'
+            'description': get_text('emergency_conditions', lang),
+            'health_implications': get_text('avoid_outdoor', lang)
         }
 
     def _get_health_recommendations(self, category: str) -> str:
         """Get health recommendations based on AQI category"""
+        lang = get_current_language()
         recommendations = {
-            "Good": "Enjoy outdoor activities. Air quality poses little to no risk.",
-            "Moderate": "Unusually sensitive people should consider limiting prolonged outdoor exertion.",
-            "Unhealthy for Sensitive": "Children, elderly, and people with respiratory issues should limit outdoor activities.",
-            "Unhealthy": "Everyone should limit prolonged outdoor exertion. Sensitive groups should avoid outdoor activities.",
-            "Very Unhealthy": "Everyone should avoid outdoor exertion. Stay indoors with windows closed.",
-            "Hazardous": "Emergency conditions. Everyone should avoid any outdoor activities. Consider evacuation if advised."
+            "Good": get_text('health_good', lang),
+            "Moderate": get_text('health_moderate', lang),
+            "Unhealthy for Sensitive": get_text('health_sensitive', lang),
+            "Unhealthy": get_text('health_unhealthy', lang),
+            "Very Unhealthy": get_text('health_very_unhealthy', lang),
+            "Hazardous": get_text('health_hazardous', lang)
         }
-        return recommendations.get(category, "Follow local health advisories.")
+        return recommendations.get(category, get_text('follow_advisories', lang))
 
     def validate_measurement(self, gas: str, value: float, unit: str) -> Dict:
         """
@@ -229,14 +241,15 @@ class DataValidator:
         scores['overall'] = sum(scores[key] * weights[key] for key in weights)
 
         # Add quality label
+        lang = get_current_language()
         if scores['overall'] >= 80:
-            scores['label'] = '🟢 Excellent'
+            scores['label'] = f"🟢 {get_text('quality_excellent', lang)}"
         elif scores['overall'] >= 60:
-            scores['label'] = '🟡 Good'
+            scores['label'] = f"🟡 {get_text('quality_good', lang)}"
         elif scores['overall'] >= 40:
-            scores['label'] = '🟠 Fair'
+            scores['label'] = f"🟠 {get_text('quality_fair', lang)}"
         else:
-            scores['label'] = '🔴 Poor'
+            scores['label'] = f"🔴 {get_text('quality_poor', lang)}"
 
         return scores
 
@@ -248,6 +261,7 @@ class DataValidator:
             List of insight strings
         """
         insights = []
+        lang = get_current_language()
 
         # Check for simultaneous violations
         violations = []
@@ -258,7 +272,8 @@ class DataValidator:
                     violations.append(gas)
 
         if len(violations) > 1:
-            insights.append(f"⚠️ Multiple pollutants violating standards simultaneously ({', '.join(violations)}) - indicates significant industrial activity")
+            insight_text = get_text('insight_multiple_violations', lang).format(gases=', '.join(violations))
+            insights.append(insight_text)
 
         # Check for unusual patterns
         high_variance_gases = []
@@ -270,7 +285,8 @@ class DataValidator:
                     high_variance_gases.append(gas)
 
         if high_variance_gases:
-            insights.append(f"📊 High spatial variance detected in {', '.join(high_variance_gases)} - suggests localized pollution sources")
+            insight_text = get_text('insight_high_variance', lang).format(gases=', '.join(high_variance_gases))
+            insights.append(insight_text)
 
         # Check wind patterns
         wind_speeds = []
@@ -281,24 +297,24 @@ class DataValidator:
         if wind_speeds:
             avg_wind = np.mean(wind_speeds)
             if avg_wind < 2:
-                insights.append("💨 Low wind speeds detected - pollution likely to accumulate")
+                insights.append(get_text('insight_low_wind', lang))
             elif avg_wind > 10:
-                insights.append("💨 High wind speeds - pollution dispersing rapidly")
+                insights.append(get_text('insight_high_wind', lang))
 
         # Time-based insights
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_hour = datetime.now(ksa_tz).hour
         if 6 <= current_hour <= 9:
-            insights.append("🌅 Morning rush hour - expect elevated NO2 from traffic")
+            insights.append(get_text('insight_morning_rush', lang))
         elif 17 <= current_hour <= 20:
-            insights.append("🌆 Evening rush hour - monitor for traffic-related pollutants")
+            insights.append(get_text('insight_evening_rush', lang))
 
         # Seasonal insights (simplified)
         current_month = datetime.now().month
         if current_month in [6, 7, 8]:
-            insights.append("☀️ Summer conditions - increased O3 formation likely")
+            insights.append(get_text('insight_summer', lang))
         elif current_month in [11, 12, 1, 2]:
-            insights.append("❄️ Winter conditions - potential for temperature inversions trapping pollutants")
+            insights.append(get_text('insight_winter', lang))
 
         return insights
 
@@ -337,26 +353,27 @@ class DataValidator:
         overall_risk = total_risk / gas_count if gas_count > 0 else 0
 
         # Determine risk level and recommendations
+        lang = get_current_language()
         if overall_risk < 20:
-            risk_level = "Low"
+            risk_level = get_text('risk_low', lang)
             color = "#00E400"
-            recommendations = ["Safe for all outdoor activities", "No special precautions needed"]
+            recommendations = [get_text('safe_outdoor', lang), get_text('no_precautions', lang)]
         elif overall_risk < 40:
-            risk_level = "Moderate"
+            risk_level = get_text('risk_moderate', lang)
             color = "#FFFF00"
-            recommendations = ["Sensitive groups should monitor symptoms", "Limit prolonged outdoor exertion"]
+            recommendations = [get_text('monitor_symptoms', lang), get_text('limit_exertion', lang)]
         elif overall_risk < 60:
-            risk_level = "High"
+            risk_level = get_text('risk_high', lang)
             color = "#FF7E00"
-            recommendations = ["Reduce outdoor activities", "Keep windows closed", "Use air purifiers if available"]
+            recommendations = [get_text('reduce_outdoor', lang), get_text('keep_windows_closed', lang), get_text('use_purifiers', lang)]
         elif overall_risk < 80:
-            risk_level = "Very High"
+            risk_level = get_text('risk_very_high', lang)
             color = "#FF0000"
-            recommendations = ["Avoid outdoor activities", "Seal indoor spaces", "Consider wearing N95 masks outdoors"]
+            recommendations = [get_text('avoid_outdoor_activities', lang), get_text('seal_indoor', lang), get_text('wear_masks', lang)]
         else:
-            risk_level = "Severe"
+            risk_level = get_text('risk_severe', lang)
             color = "#7E0023"
-            recommendations = ["Stay indoors", "Emergency measures required", "Follow official health advisories"]
+            recommendations = [get_text('stay_indoors', lang), get_text('emergency_measures', lang), get_text('follow_advisories', lang)]
 
         return {
             'overall_risk': overall_risk,

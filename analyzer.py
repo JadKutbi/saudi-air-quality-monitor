@@ -19,6 +19,15 @@ import json
 import os
 import config
 
+
+def get_current_language():
+    """Get the current language from Streamlit session state, or default to English."""
+    try:
+        import streamlit as st
+        return st.session_state.get('language', 'en')
+    except Exception:
+        return 'en'
+
 try:
     import vertexai
     from vertexai.generative_models import GenerativeModel, Part, Image
@@ -391,6 +400,13 @@ class PollutionAnalyzer:
             return self._rule_based_analysis(violation_data)
 
         try:
+            # Get current language for response
+            current_lang = get_current_language()
+            if current_lang == 'ar':
+                language_instruction = "IMPORTANT: You MUST respond ENTIRELY in Arabic (العربية). All text, analysis, recommendations, and conclusions must be written in Arabic. Use formal Arabic suitable for official environmental reports."
+            else:
+                language_instruction = "Respond in English."
+
             # Prepare context for Gemini - SAME PROMPT, DIFFERENT API
             prompt = f"""You are an environmental monitoring AI expert analyzing satellite pollution data.
 
@@ -486,7 +502,10 @@ CRITICAL RULES:
 - LOW wind confidence (<50%) reduces overall attribution certainty
 - ALWAYS explain your reasoning with emission matching + wind direction logic
 
-Keep response concise (max 300 words), professional, and actionable."""
+Keep response concise (max 300 words), professional, and actionable.
+
+**LANGUAGE INSTRUCTION:**
+{language_instruction}"""
 
             # Prepare content for AI (text + optional image)
             content_parts = []
@@ -591,8 +610,12 @@ Use the visual map to provide insights beyond the numerical data."""
     def _rule_based_analysis(self, violation_data: Dict) -> str:
         """Fallback rule-based analysis when AI is unavailable"""
         factories = violation_data.get('nearby_factories', [])
+        lang = get_current_language()
+        is_ar = lang == 'ar'
 
         if not factories:
+            if is_ar:
+                return "لم يتم العثور على مصانع بالقرب من بؤرة التلوث. قد يكون المصدر خارج المنطقة المراقبة أو مصدر متنقل."
             return "No factories found near pollution hotspot. Source may be outside monitored area or mobile source."
 
         # Find upwind factories that produce this gas
@@ -625,10 +648,168 @@ Use the visual map to provide insights beyond the numerical data."""
 
             # If top factory is NOT upwind AND has low confidence, report uncertainty
             if not top_is_upwind and top_confidence < MIN_CONFIDENCE_THRESHOLD:
-                analysis = f"⚠️ NO CLEAR SOURCE IDENTIFIED\n"
+                if is_ar:
+                    analysis = f"⚠️ لم يتم تحديد مصدر واضح\n"
+                    analysis += f"{'='*50}\n\n"
+                    analysis += f"السبب: لا توجد مصانع متوافقة مع اتجاه الرياح.\n\n"
+                    analysis += f"ظروف الرياح:\n"
+                    analysis += f"  - اتجاه الرياح: {wind_deg:.0f}° ({wind_dir})\n"
+                    analysis += f"  - سرعة الرياح: {violation_data.get('wind', {}).get('speed_ms', 0):.1f} م/ث\n"
+                    analysis += f"  - جودة بيانات الرياح: {wind_confidence:.0f}% ({wind_source})\n"
+                    wind_time = violation_data.get('wind', {}).get('timestamp_ksa', 'N/A')
+                    sat_time = violation_data.get('timestamp_ksa', 'N/A')
+                    time_offset = violation_data.get('wind', {}).get('time_offset_hours', 'N/A')
+                    analysis += f"  - وقت قياس الرياح: {wind_time}\n"
+                    analysis += f"  - وقت رصد القمر الصناعي: {sat_time}\n"
+                    analysis += f"  - الفارق الزمني: {time_offset:.1f} ساعات\n\n" if isinstance(time_offset, (int, float)) else f"  - الفارق الزمني: {time_offset}\n\n"
+
+                    analysis += f"تحليل المصانع القريبة:\n"
+                    analysis += f"  - {len(candidates)} مصانع تنتج {gas_name}\n"
+                    analysis += f"  - أقرب مُنتِج: {top['name']} ({top['distance_km']:.1f} كم)\n"
+                    analysis += f"  - ومع ذلك، هذا المصنع ليس في اتجاه الرياح (الثقة: {top_confidence:.0f}%)\n"
+                    analysis += f"  - الرياح لا تهب من أي مصنع معروف ينتج {gas_name} نحو البؤرة\n\n"
+
+                    analysis += f"التفسيرات المحتملة:\n"
+                    analysis += f"  - مصدر خارج المنطقة المراقبة (مثلاً: بعد 20 كم)\n"
+                    analysis += f"  - مصادر متنقلة (سفن، مركبات، نقل صناعي)\n"
+                    analysis += f"  - عدم يقين اتجاه الرياح (ثقة الرياح: {wind_confidence:.0f}%)\n"
+                    analysis += f"  - نقل التلوث بعيد المدى من مصادر بعيدة\n"
+                    analysis += f"  - قاعدة بيانات انبعاثات المصانع غير مكتملة\n\n"
+
+                    analysis += f"التوصية: توسيع نطاق المراقبة أو التحقيق في المصادر المتنقلة/البعيدة المحتملة.\n\n"
+
+                    analysis += f"مرجع - المُنتِجون القريبون (ليسوا في اتجاه الرياح):\n"
+                    for i, factory in enumerate(candidates[:5], 1):
+                        analysis += f"  {i}. {factory['name']} - {factory['distance_km']:.1f} كم، ثقة {factory['confidence']:.0f}%\n"
+                else:
+                    analysis = f"⚠️ NO CLEAR SOURCE IDENTIFIED\n"
+                    analysis += f"{'='*50}\n\n"
+                    analysis += f"REASON: No factories are aligned with the wind direction.\n\n"
+                    analysis += f"WIND CONDITIONS:\n"
+                    analysis += f"  - Wind Direction: {wind_deg:.0f}° ({wind_dir})\n"
+                    analysis += f"  - Wind Speed: {violation_data.get('wind', {}).get('speed_ms', 0):.1f} m/s\n"
+                    analysis += f"  - Wind Data Quality: {wind_confidence:.0f}% ({wind_source})\n"
+                    wind_time = violation_data.get('wind', {}).get('timestamp_ksa', 'N/A')
+                    sat_time = violation_data.get('timestamp_ksa', 'N/A')
+                    time_offset = violation_data.get('wind', {}).get('time_offset_hours', 'N/A')
+                    analysis += f"  - Wind measurement time: {wind_time}\n"
+                    analysis += f"  - Satellite observation time: {sat_time}\n"
+                    analysis += f"  - Time offset: {time_offset:.1f} hours\n\n" if isinstance(time_offset, (int, float)) else f"  - Time offset: {time_offset}\n\n"
+
+                    analysis += f"NEARBY FACTORIES ANALYSIS:\n"
+                    analysis += f"  - {len(candidates)} factories produce {gas_name}\n"
+                    analysis += f"  - Closest emitter: {top['name']} ({top['distance_km']:.1f} km)\n"
+                    analysis += f"  - However, this factory is NOT upwind (confidence: {top_confidence:.0f}%)\n"
+                    analysis += f"  - Wind does not blow from any known {gas_name}-producing factory toward the hotspot\n\n"
+
+                    analysis += f"POSSIBLE EXPLANATIONS:\n"
+                    analysis += f"  - Source outside monitored area (e.g., beyond 20km radius)\n"
+                    analysis += f"  - Mobile sources (ships, vehicles, industrial transport)\n"
+                    analysis += f"  - Wind direction uncertainty (wind confidence: {wind_confidence:.0f}%)\n"
+                    analysis += f"  - Long-range pollution transport from distant sources\n"
+                    analysis += f"  - Incomplete factory emissions database\n\n"
+
+                    analysis += f"RECOMMENDATION: Expand monitoring radius or investigate potential mobile/distant sources.\n\n"
+
+                    # List all nearby emitters for reference
+                    analysis += f"REFERENCE - NEARBY EMITTERS (not upwind):\n"
+                    for i, factory in enumerate(candidates[:5], 1):
+                        analysis += f"  {i}. {factory['name']} - {factory['distance_km']:.1f} km, {factory['confidence']:.0f}% confidence\n"
+
+                return analysis
+
+            # Build justified analysis (only if confidence is sufficient)
+            if is_ar:
+                analysis = f"المصدر الأكثر احتمالاً: {top['name']} ({top['type']})\n"
                 analysis += f"{'='*50}\n\n"
-                analysis += f"REASON: No factories are aligned with the wind direction.\n\n"
-                analysis += f"WIND CONDITIONS:\n"
+
+                analysis += "التبرير:\n"
+
+                # 1. Emission matching
+                analysis += f"✓ تطابق الانبعاثات: المصنع ينتج {gas_name} (الغاز المكتشف: {gas_name})\n"
+
+                # 2. Wind direction
+                analysis += f"\nظروف الرياح:\n"
+                analysis += f"  - اتجاه الرياح: {wind_deg:.0f}° ({wind_dir})\n"
+                analysis += f"  - سرعة الرياح: {violation_data.get('wind', {}).get('speed_ms', 0):.1f} م/ث\n"
+                analysis += f"  - جودة بيانات الرياح: {wind_confidence:.0f}% ({wind_source})\n"
+                wind_time = violation_data.get('wind', {}).get('timestamp_ksa', 'N/A')
+                sat_time = violation_data.get('timestamp_ksa', 'N/A')
+                time_offset = violation_data.get('wind', {}).get('time_offset_hours', 'N/A')
+                analysis += f"  - وقت قياس الرياح: {wind_time}\n"
+                analysis += f"  - وقت رصد القمر الصناعي: {sat_time}\n"
+                analysis += f"  - الفارق الزمني: {time_offset:.1f} ساعات\n\n" if isinstance(time_offset, (int, float)) else f"  - الفارق الزمني: {time_offset}\n\n"
+
+                if top['likely_upwind']:
+                    analysis += f"✓ توافق الرياح: المصنع في اتجاه الرياح من البؤرة\n"
+                    analysis += f"  - الرياح تهب من المصنع إلى بؤرة التلوث\n"
+                    analysis += f"  - الاتجاه من المصنع: {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                    analysis += f"  - ثقة التوافق: {top['confidence']:.0f}%\n"
+                else:
+                    analysis += f"⚠️ توافق الرياح: المصنع ليس في اتجاه الرياح المثالي\n"
+                    analysis += f"  - الاتجاه من المصنع: {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                    analysis += f"  - عدم تطابق اتجاه الرياح (تم اختياره لتطابق الانبعاثات + القرب)\n"
+                    analysis += f"  - ثقة التوافق: {top['confidence']:.0f}%\n"
+
+                # 3. Distance
+                analysis += f"✓ المسافة: {top['distance_km']:.1f} كم من البؤرة\n\n"
+
+                # Exclusion reasoning
+                if non_emitters:
+                    analysis += f"المصانع المستبعدة:\n"
+                    for f in non_emitters[:2]:
+                        analysis += f"✗ {f['name']}: لا ينتج {gas_name}\n"
+
+                # Similar distance comparison
+                similar_distance_emitters = [
+                    f for f in all_emitters
+                    if f['name'] != top['name']
+                    and abs(f['distance_km'] - top['distance_km']) < 2.0
+                ]
+
+                if similar_distance_emitters:
+                    analysis += f"\nمقارنة مع مصانع على مسافة مماثلة:\n"
+                    for f in similar_distance_emitters[:2]:
+                        analysis += f"✗ {f['name']} ({f['distance_km']:.1f} كم):\n"
+                        analysis += f"  - توافق الرياح: {f['confidence']:.0f}% مقابل {top['confidence']:.0f}%\n"
+                        analysis += f"  - الاتجاه: {f.get('bearing_to_hotspot', 0):.0f}° مقابل {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                        if f['confidence'] < top['confidence']:
+                            analysis += f"  - تم اختيار الأساسي بسبب توافق أفضل مع الرياح\n"
+                        else:
+                            analysis += f"  - مُدرج كمصدر بديل\n"
+
+                other_downwind = [f for f in all_emitters
+                                if not f['likely_upwind']
+                                and f['name'] != top['name']
+                                and f not in similar_distance_emitters]
+                if other_downwind:
+                    analysis += f"✗ {len(other_downwind)} مُنتِج(ون) آخر(ون): أبعد أو توافق ضعيف مع الرياح\n"
+
+                analysis += "\n"
+
+                # Overall confidence
+                if wind_confidence < 50:
+                    analysis += f"⚠️ الثقة الإجمالية: متوسطة-منخفضة (عدم يقين بيانات الرياح)\n\n"
+                elif top['likely_upwind'] and top['distance_km'] < 5:
+                    analysis += f"✓ الثقة الإجمالية: عالية (في اتجاه الرياح + قريب + تطابق الانبعاثات)\n\n"
+                else:
+                    analysis += f"✓ الثقة الإجمالية: متوسطة (تم تأكيد تطابق الانبعاثات)\n\n"
+
+                analysis += f"التوصية: فحص فوري لضوابط انبعاثات {top['name']} والتغييرات التشغيلية الأخيرة."
+
+                if len(candidates) > 1:
+                    analysis += f"\n\nالمصادر البديلة: {', '.join([f['name'] for f in candidates[1:3]])}"
+            else:
+                analysis = f"MOST LIKELY SOURCE: {top['name']} ({top['type']})\n"
+                analysis += f"{'='*50}\n\n"
+
+                analysis += "JUSTIFICATION:\n"
+
+                # 1. Emission matching
+                analysis += f"✓ Emission Match: Factory produces {gas_name} (detected gas: {gas_name})\n"
+
+                # 2. Wind direction (ALWAYS show wind details)
+                analysis += f"\nWIND CONDITIONS:\n"
                 analysis += f"  - Wind Direction: {wind_deg:.0f}° ({wind_dir})\n"
                 analysis += f"  - Wind Speed: {violation_data.get('wind', {}).get('speed_ms', 0):.1f} m/s\n"
                 analysis += f"  - Wind Data Quality: {wind_confidence:.0f}% ({wind_source})\n"
@@ -639,121 +820,91 @@ Use the visual map to provide insights beyond the numerical data."""
                 analysis += f"  - Satellite observation time: {sat_time}\n"
                 analysis += f"  - Time offset: {time_offset:.1f} hours\n\n" if isinstance(time_offset, (int, float)) else f"  - Time offset: {time_offset}\n\n"
 
-                analysis += f"NEARBY FACTORIES ANALYSIS:\n"
-                analysis += f"  - {len(candidates)} factories produce {gas_name}\n"
-                analysis += f"  - Closest emitter: {top['name']} ({top['distance_km']:.1f} km)\n"
-                analysis += f"  - However, this factory is NOT upwind (confidence: {top_confidence:.0f}%)\n"
-                analysis += f"  - Wind does not blow from any known {gas_name}-producing factory toward the hotspot\n\n"
+                if top['likely_upwind']:
+                    analysis += f"✓ Wind Alignment: Factory IS upwind of hotspot\n"
+                    analysis += f"  - Wind blows FROM factory TO pollution hotspot\n"
+                    analysis += f"  - Bearing from factory: {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                    analysis += f"  - Alignment confidence: {top['confidence']:.0f}%\n"
+                else:
+                    analysis += f"⚠️ Wind Alignment: Factory NOT ideally upwind\n"
+                    analysis += f"  - Bearing from factory: {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                    analysis += f"  - Wind bearing mismatch (selected for emission match + proximity)\n"
+                    analysis += f"  - Alignment confidence: {top['confidence']:.0f}%\n"
 
-                analysis += f"POSSIBLE EXPLANATIONS:\n"
-                analysis += f"  - Source outside monitored area (e.g., beyond 20km radius)\n"
-                analysis += f"  - Mobile sources (ships, vehicles, industrial transport)\n"
-                analysis += f"  - Wind direction uncertainty (wind confidence: {wind_confidence:.0f}%)\n"
-                analysis += f"  - Long-range pollution transport from distant sources\n"
-                analysis += f"  - Incomplete factory emissions database\n\n"
+                # 3. Distance
+                analysis += f"✓ Distance: {top['distance_km']:.1f} km from hotspot\n\n"
 
-                analysis += f"RECOMMENDATION: Expand monitoring radius or investigate potential mobile/distant sources.\n\n"
+                # Exclusion reasoning with details
+                if non_emitters:
+                    analysis += f"EXCLUDED FACTORIES:\n"
+                    for f in non_emitters[:2]:
+                        analysis += f"✗ {f['name']}: Does not produce {gas_name}\n"
 
-                # List all nearby emitters for reference
-                analysis += f"REFERENCE - NEARBY EMITTERS (not upwind):\n"
-                for i, factory in enumerate(candidates[:5], 1):
-                    analysis += f"  {i}. {factory['name']} - {factory['distance_km']:.1f} km, {factory['confidence']:.0f}% confidence\n"
+                # Show comparison with other emitters at similar distances
+                similar_distance_emitters = [
+                    f for f in all_emitters
+                    if f['name'] != top['name']
+                    and abs(f['distance_km'] - top['distance_km']) < 2.0  # Within 2km distance
+                ]
 
-                return analysis
+                if similar_distance_emitters:
+                    analysis += f"\nCOMPARISON WITH SIMILAR-DISTANCE FACTORIES:\n"
+                    for f in similar_distance_emitters[:2]:
+                        analysis += f"✗ {f['name']} ({f['distance_km']:.1f} km):\n"
+                        analysis += f"  - Wind alignment: {f['confidence']:.0f}% vs {top['confidence']:.0f}%\n"
+                        analysis += f"  - Bearing: {f.get('bearing_to_hotspot', 0):.0f}° vs {top.get('bearing_to_hotspot', 0):.0f}°\n"
+                        if f['confidence'] < top['confidence']:
+                            analysis += f"  - Selected primary due to better wind alignment\n"
+                        else:
+                            analysis += f"  - Listed as alternative source\n"
 
-            # Build justified analysis (only if confidence is sufficient)
-            analysis = f"MOST LIKELY SOURCE: {top['name']} ({top['type']})\n"
-            analysis += f"{'='*50}\n\n"
+                other_downwind = [f for f in all_emitters
+                                if not f['likely_upwind']
+                                and f['name'] != top['name']
+                                and f not in similar_distance_emitters]
+                if other_downwind:
+                    analysis += f"✗ {len(other_downwind)} other emitter(s): Farther or poor wind alignment\n"
 
-            analysis += "JUSTIFICATION:\n"
+                analysis += "\n"
 
-            # 1. Emission matching
-            analysis += f"✓ Emission Match: Factory produces {gas_name} (detected gas: {gas_name})\n"
+                # Overall confidence
+                if wind_confidence < 50:
+                    analysis += f"⚠️ OVERALL CONFIDENCE: MEDIUM-LOW (wind data uncertainty)\n\n"
+                elif top['likely_upwind'] and top['distance_km'] < 5:
+                    analysis += f"✓ OVERALL CONFIDENCE: HIGH (upwind + close + emission match)\n\n"
+                else:
+                    analysis += f"✓ OVERALL CONFIDENCE: MEDIUM (emission match confirmed)\n\n"
 
-            # 2. Wind direction (ALWAYS show wind details)
-            analysis += f"\nWIND CONDITIONS:\n"
-            analysis += f"  - Wind Direction: {wind_deg:.0f}° ({wind_dir})\n"
-            analysis += f"  - Wind Speed: {violation_data.get('wind', {}).get('speed_ms', 0):.1f} m/s\n"
-            analysis += f"  - Wind Data Quality: {wind_confidence:.0f}% ({wind_source})\n"
-            wind_time = violation_data.get('wind', {}).get('timestamp_ksa', 'N/A')
-            sat_time = violation_data.get('timestamp_ksa', 'N/A')
-            time_offset = violation_data.get('wind', {}).get('time_offset_hours', 'N/A')
-            analysis += f"  - Wind measurement time: {wind_time}\n"
-            analysis += f"  - Satellite observation time: {sat_time}\n"
-            analysis += f"  - Time offset: {time_offset:.1f} hours\n\n" if isinstance(time_offset, (int, float)) else f"  - Time offset: {time_offset}\n\n"
+                analysis += f"RECOMMENDATION: Immediate inspection of {top['name']} emission controls and recent operational changes."
 
-            if top['likely_upwind']:
-                analysis += f"✓ Wind Alignment: Factory IS upwind of hotspot\n"
-                analysis += f"  - Wind blows FROM factory TO pollution hotspot\n"
-                analysis += f"  - Bearing from factory: {top.get('bearing_to_hotspot', 0):.0f}°\n"
-                analysis += f"  - Alignment confidence: {top['confidence']:.0f}%\n"
-            else:
-                analysis += f"⚠️ Wind Alignment: Factory NOT ideally upwind\n"
-                analysis += f"  - Bearing from factory: {top.get('bearing_to_hotspot', 0):.0f}°\n"
-                analysis += f"  - Wind bearing mismatch (selected for emission match + proximity)\n"
-                analysis += f"  - Alignment confidence: {top['confidence']:.0f}%\n"
-
-            # 3. Distance
-            analysis += f"✓ Distance: {top['distance_km']:.1f} km from hotspot\n\n"
-
-            # Exclusion reasoning with details
-            if non_emitters:
-                analysis += f"EXCLUDED FACTORIES:\n"
-                for f in non_emitters[:2]:
-                    analysis += f"✗ {f['name']}: Does not produce {gas_name}\n"
-
-            # Show comparison with other emitters at similar distances
-            similar_distance_emitters = [
-                f for f in all_emitters
-                if f['name'] != top['name']
-                and abs(f['distance_km'] - top['distance_km']) < 2.0  # Within 2km distance
-            ]
-
-            if similar_distance_emitters:
-                analysis += f"\nCOMPARISON WITH SIMILAR-DISTANCE FACTORIES:\n"
-                for f in similar_distance_emitters[:2]:
-                    analysis += f"✗ {f['name']} ({f['distance_km']:.1f} km):\n"
-                    analysis += f"  - Wind alignment: {f['confidence']:.0f}% vs {top['confidence']:.0f}%\n"
-                    analysis += f"  - Bearing: {f.get('bearing_to_hotspot', 0):.0f}° vs {top.get('bearing_to_hotspot', 0):.0f}°\n"
-                    if f['confidence'] < top['confidence']:
-                        analysis += f"  - Selected primary due to better wind alignment\n"
-                    else:
-                        analysis += f"  - Listed as alternative source\n"
-
-            other_downwind = [f for f in all_emitters
-                            if not f['likely_upwind']
-                            and f['name'] != top['name']
-                            and f not in similar_distance_emitters]
-            if other_downwind:
-                analysis += f"✗ {len(other_downwind)} other emitter(s): Farther or poor wind alignment\n"
-
-            analysis += "\n"
-
-            # Overall confidence
-            if wind_confidence < 50:
-                analysis += f"⚠️ OVERALL CONFIDENCE: MEDIUM-LOW (wind data uncertainty)\n\n"
-            elif top['likely_upwind'] and top['distance_km'] < 5:
-                analysis += f"✓ OVERALL CONFIDENCE: HIGH (upwind + close + emission match)\n\n"
-            else:
-                analysis += f"✓ OVERALL CONFIDENCE: MEDIUM (emission match confirmed)\n\n"
-
-            analysis += f"RECOMMENDATION: Immediate inspection of {top['name']} emission controls and recent operational changes."
-
-            if len(candidates) > 1:
-                analysis += f"\n\nALTERNATIVE SOURCES: {', '.join([f['name'] for f in candidates[1:3]])}"
+                if len(candidates) > 1:
+                    analysis += f"\n\nALTERNATIVE SOURCES: {', '.join([f['name'] for f in candidates[1:3]])}"
         else:
             # No factories produce this gas
-            analysis = f"NO CLEAR SOURCE IDENTIFIED\n"
-            analysis += f"{'='*50}\n\n"
-            analysis += f"REASON: None of the {len(factories)} nearby factories are known to produce {gas_name}.\n\n"
-            analysis += f"DETECTED GAS: {gas_name}\n"
-            analysis += f"NEARBY FACTORIES: {', '.join([f['name'] for f in factories[:3]])}\n"
-            analysis += f"THEIR EMISSIONS: {', '.join([', '.join(f['emissions']) for f in factories[:3]])}\n\n"
-            analysis += f"POSSIBLE EXPLANATIONS:\n"
-            analysis += f"- Source outside monitored area\n"
-            analysis += f"- Mobile sources (vehicles, ships)\n"
-            analysis += f"- Incomplete factory emission database\n"
-            analysis += f"- Long-range transport (wind: {wind_dir}, confidence: {wind_confidence:.0f}%)"
+            if is_ar:
+                analysis = f"لم يتم تحديد مصدر واضح\n"
+                analysis += f"{'='*50}\n\n"
+                analysis += f"السبب: لا يُعرف أن أياً من المصانع القريبة ({len(factories)} مصنع) ينتج {gas_name}.\n\n"
+                analysis += f"الغاز المكتشف: {gas_name}\n"
+                analysis += f"المصانع القريبة: {', '.join([f['name'] for f in factories[:3]])}\n"
+                analysis += f"انبعاثاتها: {', '.join([', '.join(f['emissions']) for f in factories[:3]])}\n\n"
+                analysis += f"التفسيرات المحتملة:\n"
+                analysis += f"- مصدر خارج المنطقة المراقبة\n"
+                analysis += f"- مصادر متنقلة (مركبات، سفن)\n"
+                analysis += f"- قاعدة بيانات انبعاثات المصانع غير مكتملة\n"
+                analysis += f"- نقل بعيد المدى (الرياح: {wind_dir}، الثقة: {wind_confidence:.0f}%)"
+            else:
+                analysis = f"NO CLEAR SOURCE IDENTIFIED\n"
+                analysis += f"{'='*50}\n\n"
+                analysis += f"REASON: None of the {len(factories)} nearby factories are known to produce {gas_name}.\n\n"
+                analysis += f"DETECTED GAS: {gas_name}\n"
+                analysis += f"NEARBY FACTORIES: {', '.join([f['name'] for f in factories[:3]])}\n"
+                analysis += f"THEIR EMISSIONS: {', '.join([', '.join(f['emissions']) for f in factories[:3]])}\n\n"
+                analysis += f"POSSIBLE EXPLANATIONS:\n"
+                analysis += f"- Source outside monitored area\n"
+                analysis += f"- Mobile sources (vehicles, ships)\n"
+                analysis += f"- Incomplete factory emission database\n"
+                analysis += f"- Long-range transport (wind: {wind_dir}, confidence: {wind_confidence:.0f}%)"
 
         return analysis
     
