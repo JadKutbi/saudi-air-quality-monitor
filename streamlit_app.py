@@ -31,6 +31,7 @@ from analyzer import PollutionAnalyzer
 from visualizer import MapVisualizer
 from data_validator import DataValidator
 from violation_recorder import ViolationRecorder
+from translations import get_text, get_direction, get_font_family, TRANSLATIONS
 from dashboard_components import (
     create_aqi_dashboard,
     create_health_risk_panel,
@@ -52,40 +53,61 @@ st.set_page_config(
     }
 )
 
-# Custom CSS for professional styling
-st.markdown("""
-    <style>
-    .main {
-        padding-top: 2rem;
-    }
-    .stAlert {
-        border-radius: 10px;
-        border: 1px solid;
-    }
-    .metric-card {
-        background-color: #f0f2f6;
-        border-radius: 10px;
-        padding: 1rem;
-        margin: 0.5rem;
-    }
-    .violation-card {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin: 1rem 0;
-    }
-    h1 {
-        color: #1e3a8a;
-    }
-    .stMetric {
-        background-color: #ffffff;
-        padding: 1rem;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# Custom CSS for professional styling - injected after language is set
+def inject_custom_css():
+    """Inject CSS including RTL support for Arabic."""
+    lang = st.session_state.get('language', 'en')
+    direction = get_direction(lang)
+    font_family = get_font_family(lang)
+
+    rtl_css = """
+        .rtl-content {
+            direction: rtl;
+            text-align: right;
+        }
+        .rtl-content .stSelectbox, .rtl-content .stTextInput {
+            direction: rtl;
+        }
+    """ if lang == 'ar' else ""
+
+    st.markdown(f"""
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+        .main {{
+            padding-top: 2rem;
+            direction: {direction};
+            font-family: {font_family};
+        }}
+        .stAlert {{
+            border-radius: 10px;
+            border: 1px solid;
+        }}
+        .metric-card {{
+            background-color: #f0f2f6;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem;
+        }}
+        .violation-card {{
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            margin: 1rem 0;
+        }}
+        h1 {{
+            color: #1e3a8a;
+        }}
+        .stMetric {{
+            background-color: #ffffff;
+            padding: 1rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        {rtl_css}
+        </style>
+        """, unsafe_allow_html=True)
 
 # Initialize session state
 if 'selected_city' not in st.session_state:
@@ -93,13 +115,20 @@ if 'selected_city' not in st.session_state:
 if 'auto_refresh' not in st.session_state:
     st.session_state.auto_refresh = False
 if 'refresh_interval' not in st.session_state:
-    st.session_state.refresh_interval = 6  # Default 6 hours
+    st.session_state.refresh_interval = 6
 if 'last_update' not in st.session_state:
     st.session_state.last_update = None
 if 'pollution_data' not in st.session_state:
     st.session_state.pollution_data = {}
 if 'alert_thresholds' not in st.session_state:
     st.session_state.alert_thresholds = {}
+if 'language' not in st.session_state:
+    st.session_state.language = 'en'
+
+
+def t(key: str) -> str:
+    """Get translated text for current language."""
+    return get_text(key, st.session_state.language)
 
 @st.cache_resource
 def initialize_services():
@@ -159,70 +188,81 @@ def create_header():
     col1, col2 = st.columns([4, 1])
 
     with col1:
-        st.title("🌍 Saudi Arabia Air Quality Monitor")
-        st.caption("Real-time pollution monitoring using Sentinel-5P satellite data")
+        st.title(f"🌍 {t('app_title')}")
+        st.caption(t('app_subtitle'))
 
     with col2:
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_time = datetime.now(ksa_tz).strftime("%H:%M KSA")
-        st.metric("Time", current_time)
+        st.metric(t('time_label'), current_time)
 
 def create_sidebar():
-    """Configure sidebar with city selection and refresh controls."""
+    """Configure sidebar with city selection, language toggle, and refresh controls."""
     with st.sidebar:
-        st.header("⚙️ Control Panel")
+        # Language selector at the top
+        st.selectbox(
+            "🌐 Language / اللغة",
+            options=["en", "ar"],
+            index=0 if st.session_state.language == "en" else 1,
+            format_func=lambda x: "English" if x == "en" else "العربية",
+            key="lang_selector",
+            on_change=lambda: setattr(st.session_state, 'language', st.session_state.lang_selector)
+        )
+
+        st.divider()
+
+        st.header(f"⚙️ {t('control_panel')}")
+
+        # City selector with translated city names
+        city_keys = list(config.CITIES.keys())
         selected_city = st.selectbox(
-            "Select City",
-            options=list(config.CITIES.keys()),
-            index=list(config.CITIES.keys()).index(st.session_state.selected_city),
-            help="Choose the city to monitor"
+            t('select_city'),
+            options=city_keys,
+            index=city_keys.index(st.session_state.selected_city),
+            format_func=lambda x: t(x),
+            help=t('choose_city_help')
         )
         st.session_state.selected_city = selected_city
 
         days_back = 30
 
         # Auto-refresh settings
-        st.subheader("🔄 Refresh Settings")
+        st.subheader(f"🔄 {t('refresh_settings')}")
 
         refresh_enabled = st.toggle(
-            "Enable Auto-refresh",
+            t('auto_refresh'),
             value=st.session_state.get('auto_refresh', False),
-            help="Automatically update data at specified interval"
         )
         st.session_state.auto_refresh = refresh_enabled
 
         if refresh_enabled:
             refresh_hours = st.select_slider(
-                "Refresh Interval",
+                t('refresh_interval'),
                 options=[0.5, 1, 2, 3, 4, 6, 8, 12, 24],
                 value=st.session_state.get('refresh_interval', 6),
-                format_func=lambda x: f"{x} hours" if x >= 1 else f"{int(x*60)} minutes",
-                help="How often to refresh the data"
+                format_func=lambda x: f"{x} {t('hours')}" if x >= 1 else f"{int(x*60)} {t('minutes')}",
             )
             st.session_state.refresh_interval = refresh_hours
 
-            # Show next refresh time
             if st.session_state.last_update:
-                from datetime import datetime, timedelta
-                import pytz
                 last_update_dt = datetime.strptime(st.session_state.last_update, "%Y-%m-%d %H:%M:%S KSA")
                 ksa_tz = pytz.timezone(config.TIMEZONE)
                 last_update_ksa = ksa_tz.localize(last_update_dt)
                 next_refresh = last_update_ksa + timedelta(hours=refresh_hours)
-                st.caption(f"Next refresh: {next_refresh.strftime('%H:%M:%S KSA')}")
+                st.caption(f"Next: {next_refresh.strftime('%H:%M:%S KSA')}")
 
-        if st.button("🔄 Refresh Now", use_container_width=True, type="primary"):
+        if st.button("🔄 Refresh Now" if st.session_state.language == "en" else "🔄 تحديث الآن", use_container_width=True, type="primary"):
             st.session_state.pollution_data = {}
             st.rerun()
 
         st.divider()
         if st.session_state.last_update:
-            st.info(f"Last update: {st.session_state.last_update}")
+            st.info(f"{t('last_update')}: {st.session_state.last_update}")
 
         # Connection diagnostics
         st.divider()
-        with st.expander("🔧 Connection Diagnostics"):
-            if st.button("Test Earth Engine Connection", use_container_width=True):
+        with st.expander(f"🔧 {t('connection_diagnostics')}"):
+            if st.button(t('test_connection'), use_container_width=True):
                 with st.spinner("Testing connection..."):
                     try:
                         import ee
@@ -324,7 +364,7 @@ def fetch_pollution_data(city: str, days_back: int):
 
 def display_metrics(pollution_data: Dict):
     """Display current pollution metrics for all gases."""
-    st.subheader("📊 Current Air Quality Metrics")
+    st.subheader(f"📊 {t('current_metrics')}")
 
     # Filter for successful data
     valid_data = {gas: data for gas, data in pollution_data.items() if data.get('success')}
@@ -376,7 +416,7 @@ def display_metrics(pollution_data: Dict):
 
 def display_violations(pollution_data: Dict, city: str):
     """Display WHO threshold violations with AI-powered source attribution."""
-    st.subheader("⚠️ Violation Analysis")
+    st.subheader(f"⚠️ {t('violation_analysis')}")
 
     fetcher, analyzer, visualizer, validator, recorder = initialize_services()
     violations = []
@@ -517,11 +557,11 @@ def display_violations(pollution_data: Dict, city: str):
 
                 st.divider()
     else:
-        st.success("✅ No violations detected - Air quality is within safe limits")
+        st.success(f"✅ {t('no_violations')}")
 
 def display_map(pollution_data: Dict, city: str):
     """Display interactive pollution heatmap with factory locations."""
-    st.subheader("🗺️ Pollution Heatmap")
+    st.subheader(f"🗺️ {t('pollution_heatmap')}")
 
     from streamlit_folium import st_folium
 
@@ -852,7 +892,7 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
     if not violations:
         return
 
-    st.subheader("📈 Historical Trend Analysis")
+    st.subheader(f"📈 {t('historical_trends')}")
 
     # Prepare data for charts
     df_data = []
@@ -886,7 +926,7 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
 
     # Create tabs for different views
     trend_tab1, trend_tab2, trend_tab3 = st.tabs([
-        "📅 Timeline", "🏭 By Gas", "⚠️ By Severity"
+        f"📅 {t('timeline')}", f"🏭 {t('by_gas')}", f"⚠️ {t('by_severity')}"
     ])
 
     with trend_tab1:
@@ -898,8 +938,8 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
             daily_counts,
             x='date',
             y='count',
-            title='Violations Over Time',
-            labels={'date': 'Date', 'count': 'Number of Violations'}
+            title=t('violations_over_time'),
+            labels={'date': 'Date', 'count': t('tab_violations')}
         )
         fig_timeline.update_layout(height=300)
         fig_timeline.update_traces(fill='tozeroy', line_color='#ef4444')
@@ -910,14 +950,14 @@ def display_historical_trends(violations: List[Dict], stats: Dict):
         with col1:
             if len(daily_counts) > 0:
                 avg_daily = daily_counts['count'].mean()
-                st.metric("Avg Violations/Day", f"{avg_daily:.1f}")
+                st.metric(t('avg_violations_day'), f"{avg_daily:.1f}")
         with col2:
             if len(daily_counts) > 0:
                 max_daily = daily_counts['count'].max()
-                st.metric("Peak Day", f"{max_daily} violations")
+                st.metric(t('peak_day'), f"{max_daily}")
         with col3:
             date_range = (df['date'].max() - df['date'].min()).days + 1
-            st.metric("Monitoring Period", f"{date_range} days")
+            st.metric(t('monitoring_period'), f"{date_range} {t('days')}")
 
     with trend_tab2:
         # Violations by gas type over time
@@ -1217,6 +1257,9 @@ def display_violation_history(city: str):
 
 def main():
     """Main application entry point."""
+    # Inject CSS with RTL support
+    inject_custom_css()
+
     create_header()
 
     # Create sidebar and get settings
@@ -1225,23 +1268,23 @@ def main():
     # Auto-refresh logic
     if st.session_state.auto_refresh:
         refresh_interval = st.session_state.get('refresh_interval', 6)
-        interval_text = f"{refresh_interval} hours" if refresh_interval >= 1 else f"{int(refresh_interval*60)} minutes"
-        st.info(f"🔄 Auto-refresh enabled - Updates every {interval_text}")
+        interval_text = f"{refresh_interval} {t('hours')}" if refresh_interval >= 1 else f"{int(refresh_interval*60)} {t('minutes')}"
+        st.info(f"🔄 {t('auto_refresh')} - {interval_text}")
 
-    # Main content with enhanced tabs
+    # Main content with translated tabs
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "📊 Overview",
-        "🌡️ AQI Dashboard",
-        "🗺️ Map View",
-        "📈 Analysis",
-        "⚠️ Violations",
-        "💡 Insights",
-        "📜 History"
+        f"📊 {t('tab_overview')}",
+        f"🌡️ {t('tab_aqi')}",
+        f"🗺️ {t('tab_map')}",
+        f"📈 {t('tab_analysis')}",
+        f"⚠️ {t('tab_violations')}",
+        f"💡 {t('tab_insights')}",
+        f"📜 {t('tab_history')}"
     ])
 
     # Fetch data
     if not st.session_state.pollution_data:
-        with st.spinner(f"Fetching pollution data for {city}..."):
+        with st.spinner(t('fetching_data')):
             st.session_state.pollution_data = fetch_pollution_data(city, days_back)
             ksa_tz = pytz.timezone(config.TIMEZONE)
             st.session_state.last_update = datetime.now(ksa_tz).strftime("%Y-%m-%d %H:%M:%S KSA")
@@ -1250,15 +1293,14 @@ def main():
 
     # Check if we have any data
     if not pollution_data:
-        st.error("❌ Unable to fetch pollution data. Please check your connection and try again.")
-        st.info("Possible reasons: Google Earth Engine authentication issues, network problems, or no recent satellite data.")
-        if st.button("Retry"):
+        st.error(f"❌ {t('error')}: {t('no_data')}")
+        if st.button("Retry" if st.session_state.language == "en" else "إعادة المحاولة"):
             st.session_state.pollution_data = {}
             st.rerun()
         return
 
     with tab1:
-        st.header(f"Air Quality Overview - {city}")
+        st.header(f"{t('tab_overview')} - {t(city)}")
 
         # Check if we have data from different days
         data_ages = set()
