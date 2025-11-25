@@ -251,7 +251,7 @@ def create_sidebar():
                 next_refresh = last_update_ksa + timedelta(hours=refresh_hours)
                 st.caption(f"Next: {next_refresh.strftime('%H:%M:%S KSA')}")
 
-        if st.button("🔄 Refresh Now" if st.session_state.language == "en" else "🔄 تحديث الآن", use_container_width=True, type="primary"):
+        if st.button(f"🔄 {t('refresh_now')}", use_container_width=True, type="primary"):
             st.session_state.pollution_data = {}
             st.rerun()
 
@@ -268,42 +268,46 @@ def create_sidebar():
                         import ee
                         # Test basic connection
                         test_number = ee.Number(1).getInfo()
-                        st.success("✅ Earth Engine connection successful!")
+                        st.success(f"✅ {t('connection_successful')}")
 
                         # Test project access
                         try:
                             test_collection = ee.ImageCollection("COPERNICUS/S5P/NRTI/L3_NO2").limit(1).getInfo()
-                            st.success("✅ Can access Sentinel-5P data!")
+                            st.success(f"✅ {t('can_access_data')}")
                         except Exception as e:
-                            st.error(f"❌ Cannot access Sentinel-5P: {str(e)}")
+                            st.error(f"❌ {t('cannot_access_data')}: {str(e)}")
 
                         # Check credentials
                         if st.secrets.get("GEE_SERVICE_ACCOUNT"):
-                            st.info(f"Using service account: {st.secrets['GEE_SERVICE_ACCOUNT'][:30]}...")
+                            st.info(f"{t('using_service_account')}: {st.secrets['GEE_SERVICE_ACCOUNT'][:30]}...")
                         else:
-                            st.warning("No service account configured - using default auth")
+                            st.warning(t('no_service_account'))
 
                     except Exception as e:
-                        st.error(f"❌ Connection failed: {str(e)}")
-                        st.info("Please check:")
-                        st.write("1. GEE_SERVICE_ACCOUNT in secrets")
-                        st.write("2. GEE_PRIVATE_KEY in secrets")
-                        st.write("3. Service account has Earth Engine access")
-                        st.write("4. Project ID is correct")
+                        st.error(f"❌ {t('connection_failed')}: {str(e)}")
 
         st.divider()
-        st.subheader("ℹ️ About")
-        st.markdown("""
-        This system monitors air quality using:
-        - **Sentinel-5P** satellite data
-        - **WHO 2021** air quality guidelines
-        - **Real-time** wind data
-        - **AI-powered** source attribution
-        """)
+        st.subheader(f"ℹ️ {t('about')}")
+        if st.session_state.language == "ar":
+            st.markdown("""
+            يراقب هذا النظام جودة الهواء باستخدام:
+            - بيانات القمر الصناعي **Sentinel-5P**
+            - إرشادات **منظمة الصحة العالمية 2021**
+            - بيانات الرياح **الفورية**
+            - تحديد المصادر **بالذكاء الاصطناعي**
+            """)
+        else:
+            st.markdown("""
+            This system monitors air quality using:
+            - **Sentinel-5P** satellite data
+            - **WHO 2021** air quality guidelines
+            - **Real-time** wind data
+            - **AI-powered** source attribution
+            """)
 
-        st.subheader("🔬 Monitored Gases")
+        st.subheader(f"🔬 {t('monitored_gases')}")
         for gas, info in config.GAS_PRODUCTS.items():
-            st.caption(f"• **{gas}**: {info['name']}")
+            st.caption(f"• **{gas}**: {t(gas)}")
 
         return selected_city, days_back
 
@@ -707,7 +711,7 @@ def display_map(pollution_data: Dict, city: str):
 
 def display_trends(pollution_data: Dict):
     """Display pollution analysis charts comparing values to WHO thresholds."""
-    st.subheader("📈 Pollution Trends")
+    st.subheader(f"📈 {t('pollution_trends')}")
 
     # Create trend data with percentage of threshold
     trend_data = []
@@ -762,7 +766,7 @@ def display_trends(pollution_data: Dict):
 
         with col2:
             # Quick summary metrics
-            st.markdown("### Quick Summary")
+            st.markdown(f"### {t('quick_summary')}")
             for row in trend_data:
                 pct = row['Max (% of Threshold)']
                 if pct > 100:
@@ -775,7 +779,7 @@ def display_trends(pollution_data: Dict):
         st.divider()
 
         # Individual gas charts - each gas gets its own graph
-        st.subheader("📊 Individual Gas Analysis")
+        st.subheader(f"📊 {t('individual_gas_analysis')}")
 
         # Create a 2-column layout for individual gas charts
         num_gases = len(trend_data)
@@ -864,7 +868,7 @@ def display_trends(pollution_data: Dict):
         st.divider()
 
         # Detailed table with actual values
-        st.subheader("📋 Detailed Values Table")
+        st.subheader(f"📋 {t('detailed_values_table')}")
         df = pd.DataFrame(trend_data)
         display_df = df[['Gas', 'Gas Name', 'Min Value', 'Mean Value', 'Max Value', 'Threshold Value', 'Unit', 'Max (% of Threshold)']].copy()
         display_df['Max (% of Threshold)'] = display_df['Max (% of Threshold)'].round(1)
@@ -1294,7 +1298,7 @@ def main():
     # Check if we have any data
     if not pollution_data:
         st.error(f"❌ {t('error')}: {t('no_data')}")
-        if st.button("Retry" if st.session_state.language == "en" else "إعادة المحاولة"):
+        if st.button(t('retry')):
             st.session_state.pollution_data = {}
             st.rerun()
         return
@@ -1334,7 +1338,7 @@ def main():
                 st.metric("Data Quality", "No Data")
 
     with tab2:
-        st.header("🌡️ Air Quality Index Dashboard")
+        st.header(f"🌡️ {t('aqi_dashboard_header')}")
         # Initialize validator
         _, _, _, validator, _ = initialize_services()
 
@@ -1346,21 +1350,21 @@ def main():
         create_health_risk_panel(pollution_data, validator)
 
     with tab3:
-        st.header(f"🗺️ Pollution Map - {city}")
+        st.header(f"🗺️ {t('pollution_map')} - {t(city)}")
         display_map(pollution_data, city)
 
     with tab4:
-        st.header("📈 Detailed Analysis")
+        st.header(f"📈 {t('detailed_analysis')}")
 
         # Display trends only
         display_trends(pollution_data)
 
     with tab5:
-        st.header("⚠️ Violation Details")
+        st.header(f"⚠️ {t('violation_details')}")
         display_violations(pollution_data, city)
 
     with tab6:
-        st.header("💡 Intelligent Insights & Predictions")
+        st.header(f"💡 {t('intelligent_insights')}")
         _, _, _, validator, _ = initialize_services()
 
         # Insights panel
@@ -1368,7 +1372,7 @@ def main():
 
         # Additional analytics
         with st.expander("🔬 Advanced Analytics"):
-            st.subheader("Data Validation Report")
+            st.subheader(t('data_validation_report'))
             for gas, data in pollution_data.items():
                 if data.get('success'):
                     validation = validator.validate_measurement(gas, data['statistics']['max'], data['unit'])
@@ -1380,20 +1384,20 @@ def main():
                             st.error(f"❌ {error}")
 
     with tab7:
-        st.header("📜 Violation History")
+        st.header(f"📜 {t('tab_history')}")
         display_violation_history(city)
 
     # Footer with enhanced information
     st.divider()
     col1, col2, col3 = st.columns(3)
     with col1:
-        st.caption("**Data Source:** ESA Sentinel-5P TROPOMI")
+        st.caption(f"**{t('data_source')}:** ESA Sentinel-5P TROPOMI")
     with col2:
-        st.caption("**Standards:** WHO 2021 Guidelines")
+        st.caption(f"**{t('standards')}:** WHO 2021")
     with col3:
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_time = datetime.now(ksa_tz)
-        st.caption(f"**System Time:** {current_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+        st.caption(f"**{t('system_time')}:** {current_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
 
 if __name__ == "__main__":
     main()
