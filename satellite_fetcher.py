@@ -1,6 +1,14 @@
 """
-Satellite Data Fetcher - Retrieves real Sentinel-5P TROPOMI data
-Uses Google Earth Engine API for near-real-time atmospheric measurements
+Satellite Data Fetcher Module
+
+Retrieves Sentinel-5P TROPOMI atmospheric data from Google Earth Engine
+with automatic day-by-day search for latest available measurements.
+
+Capabilities:
+    - Multi-gas monitoring (NO2, SO2, CO, HCHO, CH4)
+    - Automatic temporal search (up to 30 days back)
+    - Wind data synchronization from ERA5/GFS
+    - Spatial statistics extraction
 """
 
 import ee
@@ -18,17 +26,15 @@ logging.basicConfig(level=config.LOG_LEVEL, format=config.LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 class SatelliteDataFetcher:
-    """Fetch real satellite data from Sentinel-5P TROPOMI sensor"""
-    
+    """Fetch Sentinel-5P TROPOMI satellite data via Google Earth Engine."""
+
     def __init__(self):
-        """Initialize Google Earth Engine and Enhanced Wind Fetcher"""
+        """Initialize Google Earth Engine connection and wind data fetcher."""
         self.ee_initialized = False
 
         try:
-            # Try to get service account from Streamlit secrets first
             import streamlit as st
             if hasattr(st, 'secrets') and 'GEE_SERVICE_ACCOUNT' in st.secrets:
-                # Use service account from secrets
                 service_account = st.secrets['GEE_SERVICE_ACCOUNT']
                 credentials = ee.ServiceAccountCredentials(
                     service_account,
@@ -43,24 +49,9 @@ class SatelliteDataFetcher:
             self._test_ee_connection()
 
         except Exception as e:
-            error_msg = str(e)
-            logger.error(f"Failed to initialize GEE: {error_msg}")
-
-            # Provide specific error guidance
-            if "401" in error_msg or "403" in error_msg:
-                logger.error("Authentication failed. Check your service account credentials.")
-            elif "Permission" in error_msg:
-                logger.error("Permission denied. Ensure the service account has Earth Engine access.")
-            elif "project" in error_msg.lower():
-                logger.error(f"Project issue. Verify project ID: {config.GEE_PROJECT}")
-
-            logger.info("For Streamlit Cloud: Add GEE_SERVICE_ACCOUNT and GEE_PRIVATE_KEY to secrets")
-            logger.info("For local: Run 'earthengine authenticate'")
-
-            # Don't raise here, let the fetch methods handle it
+            logger.error(f"Failed to initialize Earth Engine: {e}")
             self.ee_initialized = False
 
-        # Initialize enhanced wind fetcher with multiple API sources
         try:
             self.enhanced_wind_fetcher = EnhancedWindFetcher()
         except Exception as e:
@@ -68,65 +59,56 @@ class SatelliteDataFetcher:
             self.enhanced_wind_fetcher = None
 
     def _test_ee_connection(self):
-        """Test Earth Engine connection"""
+        """Verify Earth Engine connection is active."""
         try:
             ee.Number(1).getInfo()
         except Exception as e:
-            logger.error(f"Earth Engine connection test failed: {e}")
             raise Exception(f"Cannot connect to Earth Engine: {e}")
-    
+
     def fetch_gas_data(self, city: str, gas: str, days_back: int = 3) -> Dict:
         """
-        Retrieve the latest satellite measurements for a specific pollutant gas in a city.
+        Retrieve the latest satellite measurements for a specific gas.
 
-        This searches for the most recent Sentinel-5P satellite observations and
-        provides both detailed pixel data (for mapping) and summary statistics.
+        Args:
+            city: City name (must be defined in config.CITIES)
+            gas: Gas identifier (must be defined in config.GAS_PRODUCTS)
+            days_back: Initial days to search (auto-extends if needed)
+
+        Returns:
+            Dictionary with success status, statistics, pixels, and wind data
         """
         logger.info(f"Fetching {gas} data for {city}")
 
-        # Verify satellite data connection is working
         if not self.ee_initialized:
-            logger.error(f"Cannot fetch {gas} data - Earth Engine not initialized")
-            return self._create_empty_response(city, gas, error="Satellite connection not available. Check authentication.")
+            return self._create_empty_response(city, gas, error="Earth Engine not initialized")
 
         city_config = config.CITIES.get(city)
         gas_config = config.GAS_PRODUCTS.get(gas)
 
         if not city_config:
-            logger.error(f"Unknown city: {city}")
             return self._create_empty_response(city, gas, error=f"Unknown city: {city}")
 
         if not gas_config:
-            logger.error(f"Unknown gas: {gas}")
             return self._create_empty_response(city, gas, error=f"Unknown gas: {gas}")
-        
-        # Set up the geographic area and time period to search
+
         bbox = city_config["bbox"]
         aoi = ee.Geometry.Rectangle(bbox)
 
-        # Search for satellite observations from the last few days
         end_date = datetime.now(pytz.UTC)
         start_date = end_date - timedelta(days=days_back)
 
         try:
-            # Search for satellite images that captured this area
             collection = ee.ImageCollection(gas_config["dataset"]) \
                 .filterBounds(aoi) \
                 .filterDate(start_date.strftime('%Y-%m-%d'),
                            end_date.strftime('%Y-%m-%d')) \
                 .select(gas_config["band"])
 
-            # Count how many satellite passes we found
-            collection_size = collection.size()
-            collection_count = collection_size.getInfo()
-
-            logger.info(f"Found {collection_count} images for {gas} in {city} over {days_back} days")
+            collection_count = collection.size().getInfo()
+            logger.info(f"Found {collection_count} images for {gas} in {city}")
 
             if collection_count == 0:
-                # No recent data found - try looking back further
-                logger.warning(f"No data in {days_back} days, trying {days_back * 3} days")
                 extended_start = end_date - timedelta(days=days_back * 3)
-
                 collection = ee.ImageCollection(gas_config["dataset"]) \
                     .filterBounds(aoi) \
                     .filterDate(extended_start.strftime('%Y-%m-%d'),
@@ -134,81 +116,41 @@ class SatelliteDataFetcher:
                     .select(gas_config["band"])
 
                 collection_count = collection.size().getInfo()
-                logger.info(f"Extended search found {collection_count} images")
-
                 if collection_count == 0:
-                    logger.warning(f"No {gas} data available for {city} even in extended range")
                     return self._create_empty_response(city, gas,
-                        error=f"No satellite data available in the past {days_back * 3} days")
-
-            # DAY-BY-DAY FALLBACK STRATEGY: Find latest available valid data
-            #
-            # Strategy: Find latest valid single reading for this gas
-            # 1. Sort all available satellite images by timestamp (newest first)
-            # 2. Iterate through images one-by-one, starting from most recent
-            # 3. For each image, check if it has valid measurements (not cloud-covered)
-            # 4. Stop as soon as we find the first valid image
-            # 5. Extract spatial statistics from that single image (mean, max, min across city)
-            # 6. Get wind data for that exact timestamp
-            # 7. Search up to 30 days back maximum
-            #
-            # Each gas searches independently - NO2 might be from today, CO from yesterday, etc.
-            # This ensures: Latest available data per gas + No image averaging + Accurate wind sync
+                        error=f"No satellite data in past {days_back * 3} days")
 
             image = None
             timestamp_utc = None
             timestamp_ksa = None
-            day_start = None
-            same_day_count = 0
             max_days_to_search = 30
             days_searched = 0
 
-            # Sort collection by date (newest first) to get absolute latest readings
             sorted_collection = collection.sort('system:time_start', False)
-
-            # Convert to list to iterate through individual images
             image_list = sorted_collection.toList(collection_count)
 
-            # Try each image one by one, starting from the most recent
             for image_index in range(collection_count):
                 try:
-                    # Get individual image from the sorted list
                     test_image = ee.Image(image_list.get(image_index))
                     test_info = test_image.getInfo()
 
                     if test_info is None:
                         continue
 
-                    # Get timestamp for this specific image
                     timestamp_ms = test_info['properties']['system:time_start']
                     timestamp_utc_temp = datetime.fromtimestamp(timestamp_ms / 1000, tz=pytz.UTC)
                     timestamp_ksa_temp = timestamp_utc_temp.astimezone(pytz.timezone(config.TIMEZONE))
                     days_ago = (datetime.now(pytz.UTC) - timestamp_utc_temp).days
 
                     days_searched += 1
-                    logger.info(f"Trying image {image_index + 1}/{collection_count} from {timestamp_ksa_temp.strftime('%Y-%m-%d %H:%M:%S')} ({days_ago} day{'s' if days_ago != 1 else ''} ago)")
+                    logger.info(f"Checking image {image_index + 1}/{collection_count} from {timestamp_ksa_temp.strftime('%Y-%m-%d %H:%M')} ({days_ago}d ago)")
 
-                    # Stop searching if we've gone back too far
                     if days_ago >= max_days_to_search:
-                        logger.info(f"Reached max search limit ({max_days_to_search} days)")
                         break
 
-                    # DIAGNOSTIC: Check image bounds to see if it covers our AOI
-                    image_bounds = test_image.geometry().bounds().getInfo()
-                    logger.debug(f"Image bounds: {image_bounds}")
-                    logger.debug(f"AOI bounds: {aoi.bounds().getInfo()}")
-
-                    # Check if AOI intersects with image
-                    intersects = test_image.geometry().intersects(aoi, maxError=1000).getInfo()
-                    logger.debug(f"AOI intersects with image: {intersects}")
-
-                    # Try to process this image - check if it has valid measurements
-                    # Try multiple scales like the full processing does
                     band_data_test = test_image.select(gas_config["band"])
                     test_mean = None
 
-                    # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
-                    # Then try coarser scales if needed
                     for test_scale in [1113, 2000, 5000, 10000]:
                         stats_test = band_data_test.reduceRegion(
                             reducer=ee.Reducer.mean(),
@@ -218,28 +160,18 @@ class SatelliteDataFetcher:
                             bestEffort=True
                         ).getInfo()
 
-                        # CRITICAL BUG FIX: ee.Reducer.mean() returns {band_name: value}, NOT {band_name_mean: value}!
-                        # Only .combine() appends suffixes like _mean, _max, etc.
-                        test_mean = stats_test.get(gas_config["band"])  # FIX: Remove '_mean' suffix
-                        logger.debug(f"Scale {test_scale}m: stats={stats_test}, mean={test_mean}")
+                        test_mean = stats_test.get(gas_config["band"])
 
                         if test_mean is not None:
-                            logger.info(f"✓ Found data at scale {test_scale}m: mean={test_mean}")
+                            logger.info(f"Found data at scale {test_scale}m")
                             break
-                        else:
-                            logger.debug(f"✗ Scale {test_scale}m returned None")
 
-                    # If this image has valid data, use it!
                     if test_mean is not None:
                         image = test_image
                         timestamp_utc = timestamp_utc_temp
                         timestamp_ksa = timestamp_ksa_temp
-                        same_day_count = 1  # Single image, not a composite
-
-                        logger.info(f"✓ Found valid {gas} data from {timestamp_ksa.strftime('%Y-%m-%d %H:%M:%S KSA')} ({days_ago} day{'s' if days_ago != 1 else ''} ago)")
+                        logger.info(f"Valid {gas} data from {timestamp_ksa.strftime('%Y-%m-%d %H:%M KSA')}")
                         break
-                    else:
-                        logger.debug(f"✗ Image from {timestamp_ksa_temp.strftime('%Y-%m-%d %H:%M:%S')} has cloud cover, trying next image")
 
                 except Exception as e:
                     logger.debug(f"Error processing image {image_index}: {e}")

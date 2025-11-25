@@ -1,6 +1,17 @@
 """
-Saudi Arabia Air Quality Monitor
-Real-time pollution tracking using satellite data
+Saudi Arabia Air Quality Monitoring System
+
+Real-time pollution monitoring using Sentinel-5P satellite data with
+AI-powered source attribution and WHO 2021 threshold compliance tracking.
+
+Features:
+    - Real-time satellite data from Sentinel-5P TROPOMI
+    - Multi-pollutant monitoring (NO2, SO2, CO, HCHO, CH4)
+    - Wind-synchronized source attribution
+    - AI-powered violation analysis using Gemini
+    - Persistent violation history with Google Cloud Firestore
+
+Author: Royal Commission for Jubail and Yanbu Environmental Monitoring Team
 """
 
 import streamlit as st
@@ -36,9 +47,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        'Get Help': 'https://github.com/yourusername/pollution-monitor',
-        'Report a bug': "https://github.com/yourusername/pollution-monitor/issues",
-        'About': "Real-time air quality monitoring using Sentinel-5P satellite data"
+        'About': "Real-time air quality monitoring using Sentinel-5P satellite data. "
+                 "Developed for the Royal Commission for Jubail and Yanbu."
     }
 )
 
@@ -93,76 +103,72 @@ if 'alert_thresholds' not in st.session_state:
 
 @st.cache_resource
 def initialize_services():
-    """Initialize services with graceful error handling"""
+    """
+    Initialize all monitoring services with graceful error handling.
+
+    Returns:
+        Tuple of (fetcher, analyzer, visualizer, validator, recorder)
+        Any component may be None if initialization failed.
+    """
     services = {}
 
     vertex_project = st.secrets.get("VERTEX_PROJECT_ID", os.getenv("VERTEX_PROJECT_ID"))
     vertex_location = st.secrets.get("VERTEX_LOCATION", os.getenv("VERTEX_LOCATION", "us-central1"))
     gemini_key = st.secrets.get("GEMINI_API_KEY", os.getenv("GEMINI_API_KEY"))
 
-    # Initialize each service with error handling
     try:
-        fetcher = SatelliteDataFetcher()
-        services['fetcher'] = fetcher
+        services['fetcher'] = SatelliteDataFetcher()
     except Exception as e:
-        st.warning(f"Satellite data fetcher initialization issue: {str(e)}")
+        st.warning(f"Satellite data service unavailable: {str(e)}")
         services['fetcher'] = None
 
     try:
-        analyzer = PollutionAnalyzer(
+        services['analyzer'] = PollutionAnalyzer(
             gemini_api_key=gemini_key,
             vertex_project=vertex_project,
             vertex_location=vertex_location
         )
-        services['analyzer'] = analyzer
     except Exception as e:
-        st.warning(f"AI analyzer initialization issue: {str(e)}")
+        st.warning(f"AI analysis service unavailable: {str(e)}")
         services['analyzer'] = None
 
     try:
-        visualizer = MapVisualizer()
-        services['visualizer'] = visualizer
+        services['visualizer'] = MapVisualizer()
     except Exception as e:
-        st.warning(f"Map visualizer initialization issue: {str(e)}")
+        st.warning(f"Map visualization service unavailable: {str(e)}")
         services['visualizer'] = None
 
     try:
-        validator = DataValidator()
-        services['validator'] = validator
+        services['validator'] = DataValidator()
     except Exception as e:
-        st.warning(f"Data validator initialization issue: {str(e)}")
+        st.warning(f"Data validation service unavailable: {str(e)}")
         services['validator'] = None
 
     try:
-        recorder = ViolationRecorder()
-        services['recorder'] = recorder
+        services['recorder'] = ViolationRecorder()
     except Exception as e:
-        st.warning(f"Violation recorder initialization issue: {str(e)}")
+        st.warning(f"Violation recording service unavailable: {str(e)}")
         services['recorder'] = None
 
-    # Return services (some may be None)
     return (services.get('fetcher'), services.get('analyzer'),
             services.get('visualizer'), services.get('validator'),
             services.get('recorder'))
 
 def create_header():
-    """Header section"""
-    col1, col2, col3 = st.columns([2, 3, 1])
+    """Display application header with title and current time."""
+    col1, col2 = st.columns([4, 1])
 
     with col1:
-        st.image("https://via.placeholder.com/150x50/1e3a8a/ffffff?text=AQ+Monitor", width=150)
-
-    with col2:
         st.title("🌍 Saudi Arabia Air Quality Monitor")
         st.caption("Real-time pollution monitoring using Sentinel-5P satellite data")
 
-    with col3:
+    with col2:
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_time = datetime.now(ksa_tz).strftime("%H:%M KSA")
         st.metric("Time", current_time)
 
 def create_sidebar():
-    """Sidebar controls"""
+    """Configure sidebar with city selection and refresh controls."""
     with st.sidebar:
         st.header("⚙️ Control Panel")
         selected_city = st.selectbox(
@@ -173,9 +179,7 @@ def create_sidebar():
         )
         st.session_state.selected_city = selected_city
 
-        # No slider needed - system automatically searches day-by-day for latest data per gas
-        # The satellite fetcher will automatically search up to 30 days back for each gas independently
-        days_back = 30  # Maximum search window - each gas stops when it finds valid data
+        days_back = 30
 
         # Auto-refresh settings
         st.subheader("🔄 Refresh Settings")
@@ -265,15 +269,21 @@ def create_sidebar():
 
 @st.cache_data(ttl=1800)
 def fetch_pollution_data(city: str, days_back: int):
-    """Fetch pollution data with improved error handling"""
+    """
+    Fetch pollution data for all monitored gases.
+
+    Args:
+        city: City name to fetch data for
+        days_back: Maximum days to search for valid satellite data
+
+    Returns:
+        Dictionary of gas data with statistics and pixels
+    """
     fetcher, analyzer, _, _, _ = initialize_services()
 
     if not fetcher:
-        st.error("❌ Cannot connect to Earth Engine satellite data")
-        st.info("Please check:")
-        st.write("• Google Earth Engine authentication")
-        st.write("• Service account credentials in Streamlit secrets")
-        st.write("• Use the Connection Diagnostics tool in the sidebar")
+        st.error("Cannot connect to satellite data service")
+        st.info("Check Earth Engine authentication in sidebar diagnostics.")
         return {}
 
     all_data = {}
@@ -284,45 +294,36 @@ def fetch_pollution_data(city: str, days_back: int):
 
     gases = list(config.GAS_PRODUCTS.keys())
     for i, gas in enumerate(gases):
-        status.text(f"🔍 Searching for latest {gas} data (up to {days_back} days back)...")
+        status.text(f"Retrieving {gas} data...")
         progress.progress((i + 1) / len(gases))
 
         try:
             data = fetcher.fetch_gas_data(city, gas, days_back=days_back)
             if data and data.get('success'):
                 all_data[gas] = data
-                pixel_count = data.get('statistics', {}).get('pixel_count', 0)
-                status.text(f"✅ {gas} data fetched ({pixel_count} pixels)")
             else:
                 error_msg = data.get('error', 'No data available') if data else 'No data available'
                 errors.append(f"{gas}: {error_msg}")
-                status.text(f"⚠️ {gas}: {error_msg}")
         except Exception as e:
-            error_msg = str(e)
-            errors.append(f"{gas}: {error_msg}")
-            # Log but continue with other gases
-            print(f"Error fetching {gas}: {error_msg}")
+            errors.append(f"{gas}: {str(e)}")
 
     progress.empty()
     status.empty()
 
-    # Show summary of errors if any
     if errors and len(errors) == len(gases):
-        # All gases failed - likely a systemic issue
         st.error("Failed to fetch data for all gases")
         with st.expander("Error Details"):
             for error in errors:
                 st.write(f"• {error}")
     elif errors:
-        # Some gases failed
-        with st.expander(f"⚠️ Partial data issues ({len(errors)} gases)"):
+        with st.expander(f"Partial data ({len(errors)} gases unavailable)"):
             for error in errors:
                 st.write(f"• {error}")
 
     return all_data
 
 def display_metrics(pollution_data: Dict):
-    """Display metrics"""
+    """Display current pollution metrics for all gases."""
     st.subheader("📊 Current Air Quality Metrics")
 
     # Filter for successful data
@@ -374,7 +375,7 @@ def display_metrics(pollution_data: Dict):
                     st.error(f"Exceeded by {exceeded:.1f}%")
 
 def display_violations(pollution_data: Dict, city: str):
-    """Display violations with AI analysis"""
+    """Display WHO threshold violations with AI-powered source attribution."""
     st.subheader("⚠️ Violation Analysis")
 
     fetcher, analyzer, visualizer, validator, recorder = initialize_services()
@@ -442,17 +443,10 @@ def display_violations(pollution_data: Dict, city: str):
                         st.write(f"**Hotspot Location:** ({violation['hotspot']['lat']:.4f}, {violation['hotspot']['lon']:.4f})")
 
                 with col2:
-                    # AI Analysis - Text-based analysis using satellite data
                     st.write("**🤖 AI Source Analysis:**")
-                    with st.spinner("Analyzing pollution data with Gemini AI..."):
-                        # Create map for saving/display (not for AI vision on cloud)
+                    with st.spinner("Analyzing pollution source..."):
                         import tempfile
-                        import logging
-                        logger = logging.getLogger(__name__)
 
-                        logger.info(f"Starting AI analysis for {violation['gas']} violation")
-
-                        # Create pollution map (used for saving)
                         temp_map = visualizer.create_pollution_map(
                             pollution_data[violation['gas']],
                             violation['wind'],
@@ -460,27 +454,18 @@ def display_violations(pollution_data: Dict, city: str):
                             factories=violation['nearby_factories'],
                             violation=True
                         )
-                        logger.info("Pollution map created successfully")
 
-                        # Save map as HTML
                         with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False) as f:
                             temp_map.save(f.name)
                             temp_html_path = f.name
-                        logger.info(f"Map saved as HTML: {temp_html_path}")
 
-                        # Try to convert to PNG for vision analysis (works locally, not on cloud)
                         temp_png_path = temp_html_path.replace('.html', '.png')
                         map_image_created = visualizer.save_map_as_image(temp_html_path, temp_png_path)
 
-                        # Run AI analysis (with vision if available, text-only on cloud)
                         if map_image_created:
-                            logger.info(f"✅ VISION MODE: Map image created at {temp_png_path}")
                             analysis = analyzer.ai_analysis(violation, map_image_path=temp_png_path)
                         else:
-                            # Text-only mode is normal for cloud deployment - no warning needed
-                            logger.info("Using text-only AI analysis (standard for cloud deployment)")
                             analysis = analyzer.ai_analysis(violation)
-                        logger.info("AI analysis completed successfully")
 
                     # Display full analysis in an expandable section
                     if len(analysis) > 300:
@@ -490,9 +475,7 @@ def display_violations(pollution_data: Dict, city: str):
                     else:
                         st.info(analysis)
 
-                    # Automatically save violation (recorder handles duplicate check)
                     if recorder:
-                        # Check if already exists before showing spinner
                         existing_id = recorder.violation_exists(
                             violation['city'],
                             violation['gas'],
@@ -504,21 +487,17 @@ def display_violations(pollution_data: Dict, city: str):
                         else:
                             with st.spinner("Saving violation record..."):
                                 violation_id = recorder.save_violation(violation, analysis, temp_html_path)
-
                                 if violation_id:
-                                    st.success(f"✅ Saved: {violation_id}")
-                                    logger.info(f"Violation saved successfully: {violation_id}")
+                                    st.success(f"Saved: {violation_id}")
                                 else:
                                     st.warning("Save failed")
-                                    logger.error("Failed to save violation record")
 
-                    # Clean up temp files
                     try:
                         os.remove(temp_html_path)
                         if map_image_created and os.path.exists(temp_png_path):
                             os.remove(temp_png_path)
-                    except Exception as cleanup_err:
-                        logger.warning(f"Failed to clean up temp files: {cleanup_err}")
+                    except Exception:
+                        pass
 
                 # Add factory list if available
                 if violation.get('nearby_factories'):
@@ -541,16 +520,13 @@ def display_violations(pollution_data: Dict, city: str):
         st.success("✅ No violations detected - Air quality is within safe limits")
 
 def display_map(pollution_data: Dict, city: str):
-    """Display interactive pollution map"""
+    """Display interactive pollution heatmap with factory locations."""
     st.subheader("🗺️ Pollution Heatmap")
 
-    # Import streamlit_folium for displaying folium maps
     from streamlit_folium import st_folium
 
-    # Initialize visualizer
     fetcher, analyzer, visualizer, validator, _ = initialize_services()
 
-    # Get ALL gases that have successful data (with or without pixels)
     available_gases = [gas for gas, data in pollution_data.items()
                       if data.get('success')]
 
@@ -558,11 +534,9 @@ def display_map(pollution_data: Dict, city: str):
         st.warning("No pollution data available to display on the map")
         return
 
-    # Also check for gases with pixel data for heatmap
     gases_with_pixels = [gas for gas in available_gases
                         if pollution_data[gas].get('pixels')]
 
-    # Find gas with violation (if any)
     violation_gas = None
     for gas in available_gases:
         threshold_check = analyzer.check_threshold_violation(
@@ -572,7 +546,6 @@ def display_map(pollution_data: Dict, city: str):
             violation_gas = gas
             break
 
-    # Gas selector
     default_index = 0
     if violation_gas:
         default_index = available_gases.index(violation_gas)
@@ -581,7 +554,7 @@ def display_map(pollution_data: Dict, city: str):
         "Select Gas to Display:",
         available_gases,
         index=default_index,
-        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''} {'📊' if x in gases_with_pixels else '📈 Stats Only'}"
+        format_func=lambda x: f"{x} - {config.GAS_PRODUCTS[x]['name']} {'⚠️ VIOLATION' if x == violation_gas else ''}"
     )
 
     if selected_gas:
@@ -693,7 +666,7 @@ def display_map(pollution_data: Dict, city: str):
         st_folium(pollution_map, width=None, height=600, returned_objects=[])
 
 def display_trends(pollution_data: Dict):
-    """Display trend charts with each gas in a separate graph"""
+    """Display pollution analysis charts comparing values to WHO thresholds."""
     st.subheader("📈 Pollution Trends")
 
     # Create trend data with percentage of threshold
@@ -875,7 +848,7 @@ def display_trends(pollution_data: Dict):
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 def display_violation_history(city: str):
-    """Display violation history with heatmap viewing"""
+    """Display historical violation records with heatmap viewing capability."""
     _, _, visualizer, _, recorder = initialize_services()
 
     if not recorder:
@@ -1052,8 +1025,7 @@ def display_violation_history(city: str):
         st.info("No violation records found matching the filters")
 
 def main():
-    """Main application"""
-    # Create header
+    """Main application entry point."""
     create_header()
 
     # Create sidebar and get settings

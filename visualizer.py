@@ -1,5 +1,14 @@
 """
-Map Visualizer - Creates interactive Folium maps with heatmaps
+Map Visualizer Module
+
+Creates interactive Folium maps with WHO threshold-normalized heatmaps
+and industrial facility markers for pollution source attribution.
+
+Features:
+    - Health-based color scaling (WHO 2021 thresholds)
+    - Wind direction arrows synchronized to satellite observation time
+    - Factory markers with upwind/downwind status
+    - Layer controls for satellite imagery overlay
 """
 
 import folium
@@ -51,73 +60,50 @@ class MapVisualizer:
         # Add heatmap if pixels available
         pixels = gas_data.get('pixels', [])
         if pixels:
-            # ENHANCED NORMALIZATION: Use WHO thresholds for scientifically accurate scaling
-            # This is BETTER than Google Maps because we scale to health-based thresholds
-            # instead of arbitrary max values
             threshold_config = config.GAS_THRESHOLDS.get(gas, {})
             threshold = threshold_config.get('column_threshold')
             critical_threshold = threshold_config.get('critical_threshold')
 
-            # Smart normalization strategy
             if threshold and critical_threshold:
-                # Scale relative to WHO thresholds (0 = safe, 0.5 = threshold, 1.0 = critical)
-                # This provides health-meaningful scaling
                 heat_data_normalized = []
                 for p in pixels:
                     if p['value'] < threshold:
-                        # Safe range: 0 to 0.5 (green to yellow)
                         normalized = 0.5 * (p['value'] / threshold)
                     elif p['value'] < critical_threshold:
-                        # Moderate violation: 0.5 to 0.8 (yellow to red)
                         normalized = 0.5 + 0.3 * ((p['value'] - threshold) / (critical_threshold - threshold))
                     else:
-                        # Critical violation: 0.8 to 1.0 (red to maroon)
                         normalized = 0.8 + 0.2 * min(1.0, (p['value'] - critical_threshold) / critical_threshold)
-
                     heat_data_normalized.append([p['lat'], p['lon'], min(1.0, normalized)])
-
-                logger.info(f"Using WHO threshold-based normalization (threshold: {threshold}, critical: {critical_threshold})")
+                logger.info(f"WHO threshold normalization applied")
             else:
-                # Fallback: Percentile-based normalization (better than simple max)
-                # Uses 95th percentile as max to avoid outlier skewing
                 values = [p['value'] for p in pixels]
                 percentile_95 = np.percentile(values, 95) if len(values) > 1 else max(values)
-                max_val = max(percentile_95, max(values) * 0.5)  # Ensure we capture extremes
-
+                max_val = max(percentile_95, max(values) * 0.5)
                 heat_data_normalized = [[p['lat'], p['lon'], min(1.0, p['value']/max_val)]
                                        for p in pixels]
-                logger.info(f"Using 95th percentile normalization (p95: {percentile_95:.2f})")
+                logger.info(f"Percentile-based normalization applied")
 
-            # Google Maps Air Quality Index (AQI) Standard Color Scheme
-            # ENHANCEMENT: We map these colors to WHO health thresholds, not arbitrary values
-            # This makes our visualization MORE scientifically accurate than Google Maps
-            #
-            # NOTE: Heatmap intensity WILL change slightly when zooming in/out
-            # This is NORMAL and CORRECT behavior - it shows data density at different scales
-            # - Zoomed out: Shows overall pollution distribution (more blended)
-            # - Zoomed in: Shows precise hotspot locations (more detailed)
-            # The colors remain scientifically accurate (based on WHO thresholds) at all zoom levels
             HeatMap(
                 heat_data_normalized,
-                name=f'{gas} Concentration (WHO-scaled)',
-                radius=25,  # Increased radius for better visibility
-                blur=30,    # Smooth gradients (better than blocky Google Maps)
-                min_opacity=0.3,  # Ensures minimum visibility at all zoom levels
-                max_zoom=18,  # Allow detailed view at high zoom
+                name=f'{gas} Concentration',
+                radius=25,
+                blur=30,
+                min_opacity=0.3,
+                max_zoom=18,
                 gradient={
-                    0.0: '#00E400',  # Green - Safe (below WHO threshold)
-                    0.2: '#92D050',  # Light green - Low
-                    0.4: '#FFFF00',  # Yellow - Approaching threshold
-                    0.5: '#FFC000',  # Yellow-orange - At threshold
-                    0.6: '#FF7E00',  # Orange - Moderate violation
-                    0.7: '#FF4500',  # Dark orange - Unhealthy
-                    0.8: '#FF0000',  # Red - Critical threshold reached
-                    0.9: '#8F3F97',  # Purple - Severe violation
-                    1.0: '#7E0023'   # Maroon - Hazardous
+                    0.0: '#00E400',
+                    0.2: '#92D050',
+                    0.4: '#FFFF00',
+                    0.5: '#FFC000',
+                    0.6: '#FF7E00',
+                    0.7: '#FF4500',
+                    0.8: '#FF0000',
+                    0.9: '#8F3F97',
+                    1.0: '#7E0023'
                 }
             ).add_to(m)
 
-            logger.info(f"Added WHO threshold-scaled heatmap with {len(pixels)} pixels")
+            logger.info(f"Heatmap created with {len(pixels)} pixels")
         
         # Add hotspot marker
         if hotspot:
@@ -176,11 +162,9 @@ class MapVisualizer:
                     icon=folium.Icon(color=color, icon=icon, prefix='fa')
                 ).add_to(factory_cluster)
         
-        # ENHANCED: Add comprehensive title with threshold context (BETTER than Google Maps)
         threshold_config = config.GAS_THRESHOLDS.get(gas, {})
         threshold = threshold_config.get('column_threshold', 'N/A')
         critical = threshold_config.get('critical_threshold', 'N/A')
-
         threshold_str = f"{threshold:.1f}" if isinstance(threshold, (int, float)) else "N/A"
         critical_str = f"{critical:.1f}" if isinstance(critical, (int, float)) else "N/A"
 
@@ -203,7 +187,6 @@ class MapVisualizer:
         '''
         m.get_root().html.add_child(folium.Element(title_html))
 
-        # ENHANCED: Add health-based color legend (Google Maps doesn't show health thresholds!)
         legend_html = f'''
         <div style="position: fixed;
                     bottom: 50px; left: 50px; width: 220px;

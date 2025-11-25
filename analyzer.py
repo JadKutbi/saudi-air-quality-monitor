@@ -1,5 +1,14 @@
 """
-Pollution Analyzer - Detects violations and attributes to factories using AI
+Pollution Analyzer Module
+
+Analyzes satellite pollution data to detect WHO threshold violations and
+attribute sources using multi-factor scoring and AI-powered analysis.
+
+Features:
+    - WHO 2021 threshold violation detection
+    - Wind-based upwind factory identification
+    - Multi-factor confidence scoring (wind, distance, emissions)
+    - AI source attribution using Gemini with optional vision analysis
 """
 
 import numpy as np
@@ -10,7 +19,6 @@ import json
 import os
 import config
 
-# Try Vertex AI first (best quality), fallback to genai
 try:
     import vertexai
     from vertexai.generative_models import GenerativeModel, Part, Image
@@ -26,13 +34,13 @@ logging.basicConfig(level=config.LOG_LEVEL, format=config.LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 class PollutionAnalyzer:
-    """Analyze pollution data and detect source factories"""
+    """Analyze pollution data and attribute sources to industrial facilities."""
 
     def __init__(self, gemini_api_key: Optional[str] = None,
                  vertex_project: Optional[str] = None,
                  vertex_location: Optional[str] = None):
         """
-        Initialize analyzer with AI capabilities
+        Initialize analyzer with AI capabilities.
 
         Args:
             gemini_api_key: Gemini API key (fallback)
@@ -42,24 +50,20 @@ class PollutionAnalyzer:
         self.model = None
         self.use_vertex = False
 
-        # Try Vertex AI first (best quality with vision)
         if VERTEX_AI_AVAILABLE and vertex_project and vertex_location:
             try:
                 vertexai.init(project=vertex_project, location=vertex_location)
-                # Use Gemini 3 Pro - best vision model for spatial analysis and multimodal reasoning
                 self.model = GenerativeModel("gemini-3-pro-preview-11-2025")
                 self.use_vertex = True
-                logger.info(f"Vertex AI initialized with gemini-3-pro-preview-11-2025 (project: {vertex_project}, location: {vertex_location})")
+                logger.info(f"Vertex AI initialized (project: {vertex_project})")
             except Exception as e:
                 logger.warning(f"Vertex AI initialization failed: {e}")
-                logger.info("Falling back to standard Gemini API...")
 
-        # Fallback to standard Gemini API
         if not self.model and gemini_api_key and genai:
             genai.configure(api_key=gemini_api_key)
             self.model = genai.GenerativeModel('gemini-3-pro-preview')
             self.use_vertex = False
-            logger.info("Google Gemini API initialized (gemini-3-pro-preview)")
+            logger.info("Gemini API initialized")
     
     def find_hotspot(self, gas_data: Dict) -> Optional[Dict]:
         """

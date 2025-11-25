@@ -1,24 +1,38 @@
 """
-Configuration for pollution monitoring system
+Saudi Arabia Air Quality Monitoring System - Configuration Module
+
+This module contains all configuration parameters for the real-time pollution
+monitoring system, including city definitions, gas monitoring specifications,
+WHO 2021 threshold values, and industrial facility locations.
+
+Data Sources:
+    - Sentinel-5P TROPOMI satellite imagery via Google Earth Engine
+    - ERA5/NOAA GFS reanalysis for wind data
+    - Real-time weather APIs for wind synchronization
+
+Standards:
+    - WHO Air Quality Guidelines 2021
+    - US EPA AQI calculation methodology
 """
 
 import os
 from datetime import datetime
 
-# City configurations
+
+# =============================================================================
+# GEOGRAPHIC CONFIGURATION
+# =============================================================================
 CITIES = {
     "Yanbu": {
         "center": [24.0889, 38.0618],
-        "bbox": [38.07, 23.89, 38.46, 24.05],  # EXPANDED: covers Yanbu Industrial City fully
-        "radius_km": 25  # Increased radius
-    },
-
-    "Jubail": {
-        "center": [27.0173, 49.6575],
-        "bbox": [49.50, 26.90, 49.80, 27.15],  # EXPANDED bbox
+        "bbox": [38.07, 23.89, 38.46, 24.05],
         "radius_km": 25
     },
-
+    "Jubail": {
+        "center": [27.0173, 49.6575],
+        "bbox": [49.50, 26.90, 49.80, 27.15],
+        "radius_km": 25
+    },
     "Jazan": {
         "center": [16.8892, 42.5511],
         "bbox": [42.4511, 16.7892, 42.6511, 16.9892],
@@ -26,7 +40,10 @@ CITIES = {
     }
 }
 
-# Gas monitoring
+# =============================================================================
+# GAS MONITORING CONFIGURATION
+# Sentinel-5P TROPOMI products for tropospheric pollution monitoring
+# =============================================================================
 GAS_PRODUCTS = {
     "NO2": {
         "name": "Nitrogen Dioxide",
@@ -52,7 +69,6 @@ GAS_PRODUCTS = {
         "conversion_factor": 1e18,
         "display_unit": "10^18 mol/cm²"
     },
-    # O3 REMOVED - Measures total column including stratosphere, not suitable for pollution monitoring
     "HCHO": {
         "name": "Formaldehyde",
         "dataset": "COPERNICUS/S5P/NRTI/L3_HCHO",
@@ -71,41 +87,44 @@ GAS_PRODUCTS = {
     }
 }
 
-# WHO 2021 thresholds
+# =============================================================================
+# WHO 2021 AIR QUALITY THRESHOLDS
+# Column density thresholds derived from WHO Air Quality Guidelines 2021
+# and validated against Sentinel-5P satellite measurements
+# =============================================================================
 GAS_THRESHOLDS = {
     "NO2": {
         "annual_avg_ugm3": 10,
         "24h_avg_ugm3": 25,
         "1h_avg_ugm3": 200,
-        "column_threshold": 10.0,    # 10^15 molecules/cm² (moderate pollution)
-        "critical_threshold": 20.0,  # 10^15 molecules/cm² (high pollution)
+        "column_threshold": 10.0,
+        "critical_threshold": 20.0,
         "unit": "10^15 mol/cm²",
-        "source": "WHO Air Quality Guidelines 2021 + Sentinel-5P validation"
+        "source": "WHO Air Quality Guidelines 2021"
     },
     "SO2": {
         "24h_avg_ugm3": 40,
         "10min_avg_ugm3": 500,
-        "column_threshold": 2.0,     # 10^15 molecules/cm² (industrial level) - CORRECTED
-        "critical_threshold": 5.0,   # 10^15 molecules/cm² (heavy pollution) - CORRECTED
+        "column_threshold": 2.0,
+        "critical_threshold": 5.0,
         "unit": "10^15 mol/cm²",
-        "source": "WHO 2021 + Environmental validation - Fixed Nov 22"
+        "source": "WHO Air Quality Guidelines 2021"
     },
     "CO": {
         "24h_avg_mgm3": 4,
         "8h_avg_mgm3": 10,
         "1h_avg_mgm3": 35,
-        "column_threshold": 3.5,     # 10^18 molecules/cm² (moderate - 0.058 mol/m²)
-        "critical_threshold": 5.0,   # 10^18 molecules/cm² (high - 0.083 mol/m²)
+        "column_threshold": 3.5,
+        "critical_threshold": 5.0,
         "unit": "10^18 mol/cm²",
-        "source": "WHO/EPA Standards + Sentinel-5P typical values"
+        "source": "WHO/EPA Standards"
     },
-    # O3 REMOVED - Total column measurements not comparable to WHO ground-level guidelines
     "HCHO": {
         "30min_avg_ugm3": 100,
-        "column_threshold": 8.0,     # 10^15 molecules/cm² (elevated)
-        "critical_threshold": 12.0,  # 10^15 molecules/cm² (high pollution)
+        "column_threshold": 8.0,
+        "critical_threshold": 12.0,
         "unit": "10^15 mol/cm²",
-        "source": "WHO Indoor Air Quality Guidelines + tropospheric studies"
+        "source": "WHO Indoor Air Quality Guidelines"
     },
     "CH4": {
         "background_ppb": 1900,
@@ -117,7 +136,10 @@ GAS_THRESHOLDS = {
 }
 
 
-# Factory database
+# =============================================================================
+# INDUSTRIAL FACILITY DATABASE
+# Verified locations of major industrial facilities for source attribution
+# =============================================================================
 FACTORIES = {
     "Yanbu": [
         {
@@ -381,58 +403,51 @@ FACTORIES = {
     ]
 }
 
-# Wind data configuration
-# Wind data sources (ordered by priority)
-# 1. OpenWeatherMap API (real-time, configured via .env)
-# 2. ERA5 Reanalysis (historical, from Google Earth Engine)
-
+# =============================================================================
+# WIND DATA CONFIGURATION
+# Data sources for wind direction/speed used in source attribution
+# =============================================================================
 WIND_SOURCES = [
     {
         "id": "era5_land_hourly",
-        "label": "ECMWF ERA5-Land Hourly (5-day lag, BEST ACCURACY)",
+        "label": "ECMWF ERA5-Land Hourly",
         "dataset": "ECMWF/ERA5_LAND/HOURLY",
         "u_component": "u_component_of_wind_10m",
         "v_component": "v_component_of_wind_10m",
-        "scale": 11132,  # ERA5-Land resolution: ~11km (higher than GFS)
-        "search_windows_hours": [1, 2, 3, 6, 12, 24, 48, 72],  # Aggressive hourly search (1-3 days back)
-        "forward_search_hours": 0,  # Only look backwards
-        "max_time_offset_hours": 72,  # Accept data up to 3 days old
-        "base_reliability": 0.95,  # ERA5 is highly reliable (reanalysis data)
-        "sample_radius_km": 30,  # Sample area around city
+        "scale": 11132,
+        "search_windows_hours": [1, 2, 3, 6, 12, 24, 48, 72],
+        "forward_search_hours": 0,
+        "max_time_offset_hours": 72,
+        "base_reliability": 0.95,
+        "sample_radius_km": 30,
     },
     {
         "id": "noaa_gfs",
-        "label": "NOAA GFS (6-hourly, FREE, fallback)",
+        "label": "NOAA GFS",
         "dataset": "NOAA/GFS0P25",
         "u_component": "u_component_of_wind_10m_above_ground",
         "v_component": "v_component_of_wind_10m_above_ground",
-        "scale": 27830,  # GFS resolution: 0.25° (~28km)
-        "search_windows_hours": [1, 3, 6, 12, 24, 48],  # Search up to 2 days back
-        "forward_search_hours": 0,  # Only look backwards
-        "max_time_offset_hours": 48,  # Accept data up to 2 days old
-        "base_reliability": 0.92,  # NOAA GFS is highly reliable (operational forecast/analysis)
-        "sample_radius_km": 40,  # Sample area around city
+        "scale": 27830,
+        "search_windows_hours": [1, 3, 6, 12, 24, 48],
+        "forward_search_hours": 0,
+        "max_time_offset_hours": 48,
+        "base_reliability": 0.92,
+        "sample_radius_km": 40,
     },
     {
         "id": "era5_daily",
-        "label": "ECMWF ERA5 Daily (fallback)",
+        "label": "ECMWF ERA5 Daily",
         "dataset": "ECMWF/ERA5/DAILY",
         "u_component": "u_component_of_wind_10m",
         "v_component": "v_component_of_wind_10m",
-        "scale": 27830,  # ERA5 Daily resolution: ~28km
-        "search_windows_hours": [24, 72],  # Daily data, search 1-3 days back
+        "scale": 27830,
+        "search_windows_hours": [24, 72],
         "forward_search_hours": 0,
         "max_time_offset_hours": 72,
-        "base_reliability": 0.90,  # Slightly lower (daily aggregation)
+        "base_reliability": 0.90,
         "sample_radius_km": 50,
     },
 ]
-
-# Priority order (for Earth Engine sources):
-# 1. ERA5-Land Hourly (BEST: hourly data, 5-day lag, 11km resolution) ⭐ PRIMARY
-# 2. NOAA GFS (6-hourly, FREE, same-day availability)
-# 3. ERA5 Daily (fallback, 5-day lag)
-# Note: OpenWeatherMap API (real-time) is tried as final fallback if all Earth Engine sources fail
 
 WIND_DEFAULTS = {
     "speed_ms": 2.0,
@@ -441,10 +456,12 @@ WIND_DEFAULTS = {
     "cardinal": "N",
 }
 
+
+# =============================================================================
+# SYSTEM CONFIGURATION
+# =============================================================================
 LIVE_VIOLATION_TTL_HOURS = 12
 LIVE_VIOLATIONS_MAX_ENTRIES = 50
-
-# System configuration
 SCAN_INTERVAL_HOURS = 12
 SCAN_INTERVAL_MINUTES = SCAN_INTERVAL_HOURS * 60
 TIMEZONE = "Asia/Riyadh"
@@ -458,7 +475,10 @@ LIVE_VIOLATIONS_FILE = os.path.join(LOG_DIR, "live_violations.json")
 for directory in [DATA_DIR, LOG_DIR, VIOLATION_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-# Notification configuration
+
+# =============================================================================
+# NOTIFICATION CONFIGURATION
+# =============================================================================
 def _env_bool(name: str, default: bool = False) -> bool:
     """Parse environment variable into boolean flag."""
     return os.getenv(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
@@ -477,13 +497,13 @@ NOTIFICATION_CONFIG = {
         "enabled": _env_bool("EMAIL_NOTIFICATIONS_ENABLED", False),
         "smtp_server": os.getenv("EMAIL_SMTP_SERVER", "smtp.gmail.com"),
         "smtp_port": int(os.getenv("EMAIL_SMTP_PORT", "587")),
-        "sender_email": os.getenv("EMAIL_SENDER_ADDRESS", "jadkutbi@gmail.com"),
-        "sender_password": os.getenv("EMAIL_SENDER_PASSWORD", "@jK6833800"),
-        "recipients": _env_list("EMAIL_RECIPIENTS", ["jadkutbi@gmail.com"]),
+        "sender_email": os.getenv("EMAIL_SENDER_ADDRESS", ""),
+        "sender_password": os.getenv("EMAIL_SENDER_PASSWORD", ""),
+        "recipients": _env_list("EMAIL_RECIPIENTS", []),
     },
     "webhook": {
         "enabled": _env_bool("WEBHOOK_NOTIFICATIONS_ENABLED", False),
-        "url": os.getenv("WEBHOOK_URL", "https://your-webhook-url.com/notify"),
+        "url": os.getenv("WEBHOOK_URL", ""),
     },
     "telegram": {
         "enabled": _env_bool("TELEGRAM_NOTIFICATIONS_ENABLED", False),
@@ -493,5 +513,5 @@ NOTIFICATION_CONFIG = {
 }
 
 GEE_PROJECT = 'rcjyenviroment'
-LOG_LEVEL = "DEBUG"  # TEMPORARY: Enable debug logging to diagnose reduceRegion issue
+LOG_LEVEL = "INFO"
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
