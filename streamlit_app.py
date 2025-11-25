@@ -847,6 +847,193 @@ def display_trends(pollution_data: Dict):
         styled_df = display_df.style.applymap(color_violations, subset=['% of Threshold'])
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
+def display_historical_trends(violations: List[Dict], stats: Dict):
+    """Display historical trend analysis charts."""
+    if not violations:
+        return
+
+    st.subheader("📈 Historical Trend Analysis")
+
+    # Prepare data for charts
+    df_data = []
+    for v in violations:
+        try:
+            # Parse timestamp
+            ts_str = v.get('timestamp', v.get('timestamp_ksa', ''))
+            if 'T' in ts_str:
+                ts = datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+            else:
+                ts = datetime.strptime(ts_str.split(' KSA')[0], '%Y-%m-%d %H:%M:%S')
+
+            df_data.append({
+                'date': ts.date(),
+                'datetime': ts,
+                'gas': v.get('gas', 'Unknown'),
+                'severity': v.get('severity', 'unknown'),
+                'max_value': v.get('max_value', 0),
+                'threshold': v.get('threshold', 0),
+                'percentage_over': v.get('percentage_over', 0),
+                'city': v.get('city', 'Unknown')
+            })
+        except Exception:
+            continue
+
+    if not df_data:
+        st.info("Not enough data for trend analysis")
+        return
+
+    df = pd.DataFrame(df_data)
+
+    # Create tabs for different views
+    trend_tab1, trend_tab2, trend_tab3 = st.tabs([
+        "📅 Timeline", "🏭 By Gas", "⚠️ By Severity"
+    ])
+
+    with trend_tab1:
+        # Violations over time
+        daily_counts = df.groupby('date').size().reset_index(name='count')
+        daily_counts['date'] = pd.to_datetime(daily_counts['date'])
+
+        fig_timeline = px.area(
+            daily_counts,
+            x='date',
+            y='count',
+            title='Violations Over Time',
+            labels={'date': 'Date', 'count': 'Number of Violations'}
+        )
+        fig_timeline.update_layout(height=300)
+        fig_timeline.update_traces(fill='tozeroy', line_color='#ef4444')
+        st.plotly_chart(fig_timeline, use_container_width=True)
+
+        # Summary metrics
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if len(daily_counts) > 0:
+                avg_daily = daily_counts['count'].mean()
+                st.metric("Avg Violations/Day", f"{avg_daily:.1f}")
+        with col2:
+            if len(daily_counts) > 0:
+                max_daily = daily_counts['count'].max()
+                st.metric("Peak Day", f"{max_daily} violations")
+        with col3:
+            date_range = (df['date'].max() - df['date'].min()).days + 1
+            st.metric("Monitoring Period", f"{date_range} days")
+
+    with trend_tab2:
+        # Violations by gas type over time
+        gas_daily = df.groupby(['date', 'gas']).size().reset_index(name='count')
+        gas_daily['date'] = pd.to_datetime(gas_daily['date'])
+
+        fig_gas = px.bar(
+            gas_daily,
+            x='date',
+            y='count',
+            color='gas',
+            title='Violations by Gas Type Over Time',
+            labels={'date': 'Date', 'count': 'Violations', 'gas': 'Gas'},
+            color_discrete_map={
+                'NO2': '#ef4444',
+                'SO2': '#f59e0b',
+                'CO': '#6366f1',
+                'HCHO': '#10b981',
+                'CH4': '#8b5cf6'
+            }
+        )
+        fig_gas.update_layout(height=300, barmode='stack')
+        st.plotly_chart(fig_gas, use_container_width=True)
+
+        # Gas breakdown pie chart
+        col1, col2 = st.columns(2)
+        with col1:
+            gas_totals = df['gas'].value_counts().reset_index()
+            gas_totals.columns = ['gas', 'count']
+            fig_pie = px.pie(
+                gas_totals,
+                values='count',
+                names='gas',
+                title='Total Violations by Gas',
+                color='gas',
+                color_discrete_map={
+                    'NO2': '#ef4444',
+                    'SO2': '#f59e0b',
+                    'CO': '#6366f1',
+                    'HCHO': '#10b981',
+                    'CH4': '#8b5cf6'
+                }
+            )
+            fig_pie.update_layout(height=250)
+            st.plotly_chart(fig_pie, use_container_width=True)
+
+        with col2:
+            # Average exceedance by gas
+            avg_exceed = df.groupby('gas')['percentage_over'].mean().reset_index()
+            avg_exceed.columns = ['gas', 'avg_percentage']
+            fig_exceed = px.bar(
+                avg_exceed,
+                x='gas',
+                y='avg_percentage',
+                title='Avg Threshold Exceedance by Gas',
+                labels={'gas': 'Gas', 'avg_percentage': 'Avg % Over Threshold'},
+                color='avg_percentage',
+                color_continuous_scale='Reds'
+            )
+            fig_exceed.update_layout(height=250, showlegend=False)
+            st.plotly_chart(fig_exceed, use_container_width=True)
+
+    with trend_tab3:
+        # Severity analysis
+        severity_daily = df.groupby(['date', 'severity']).size().reset_index(name='count')
+        severity_daily['date'] = pd.to_datetime(severity_daily['date'])
+
+        fig_severity = px.bar(
+            severity_daily,
+            x='date',
+            y='count',
+            color='severity',
+            title='Violations by Severity Over Time',
+            labels={'date': 'Date', 'count': 'Violations', 'severity': 'Severity'},
+            color_discrete_map={
+                'critical': '#dc2626',
+                'moderate': '#f59e0b',
+                'normal': '#22c55e'
+            }
+        )
+        fig_severity.update_layout(height=300, barmode='stack')
+        st.plotly_chart(fig_severity, use_container_width=True)
+
+        # Severity breakdown
+        col1, col2 = st.columns(2)
+        with col1:
+            severity_totals = df['severity'].value_counts().reset_index()
+            severity_totals.columns = ['severity', 'count']
+            fig_sev_pie = px.pie(
+                severity_totals,
+                values='count',
+                names='severity',
+                title='Violations by Severity',
+                color='severity',
+                color_discrete_map={
+                    'critical': '#dc2626',
+                    'moderate': '#f59e0b',
+                    'normal': '#22c55e'
+                }
+            )
+            fig_sev_pie.update_layout(height=250)
+            st.plotly_chart(fig_sev_pie, use_container_width=True)
+
+        with col2:
+            # Critical violation rate
+            total = len(df)
+            critical_count = len(df[df['severity'] == 'critical'])
+            moderate_count = len(df[df['severity'] == 'moderate'])
+            critical_rate = (critical_count / total * 100) if total > 0 else 0
+            moderate_rate = (moderate_count / total * 100) if total > 0 else 0
+
+            st.markdown("### Severity Breakdown")
+            st.metric("Critical Rate", f"{critical_rate:.1f}%", delta=f"{critical_count} violations")
+            st.metric("Moderate Rate", f"{moderate_rate:.1f}%", delta=f"{moderate_count} violations")
+
+
 def display_violation_history(city: str):
     """Display historical violation records with heatmap viewing capability."""
     _, _, visualizer, _, recorder = initialize_services()
@@ -907,13 +1094,17 @@ def display_violation_history(city: str):
 
     if stats['total_violations'] == 0:
         st.info("No violations recorded yet. Violations are automatically saved when detected in the '⚠️ Violations' tab.")
-
-        # Check if there are current violations that could be saved
         st.markdown("---")
         st.markdown("**💡 Tip:** Go to the **⚠️ Violations** tab to detect and auto-save any current violations.")
         return
 
-    st.divider()
+    # Get all violations for trend analysis (before filtering)
+    all_violations = recorder.get_all_violations(city=city, limit=500)
+
+    # Display trend analysis section
+    if len(all_violations) >= 2:
+        display_historical_trends(all_violations, stats)
+        st.divider()
 
     # Filter controls
     col1, col2, col3 = st.columns([2, 2, 1])
