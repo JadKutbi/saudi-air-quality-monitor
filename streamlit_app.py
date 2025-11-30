@@ -68,14 +68,6 @@ def inject_custom_css():
         .rtl-content .stSelectbox, .rtl-content .stTextInput {
             direction: rtl;
         }
-        /* Fix Plotly chart centering in RTL mode */
-        .js-plotly-plot, .plotly, .plot-container {
-            direction: ltr !important;
-        }
-        /* Ensure gauge number stays centered */
-        .js-plotly-plot .indicatorlayer text {
-            text-anchor: middle !important;
-        }
     """ if lang == 'ar' else ""
 
     st.markdown(f"""

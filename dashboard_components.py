@@ -86,10 +86,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                 margin=dict(l=40, r=40, t=60, b=20),
                 autosize=True
             )
-            # Wrap chart in LTR container to prevent RTL direction from affecting number centering
-            st.markdown('<div style="direction: ltr;">', unsafe_allow_html=True)
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
-            st.markdown('</div>', unsafe_allow_html=True)
 
         with col2:
             st.metric(t('air_quality_status'), max_aqi['CategoryTranslated'])
