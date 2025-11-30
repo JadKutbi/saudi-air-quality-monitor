@@ -68,10 +68,20 @@ def inject_custom_css():
         .rtl-content .stSelectbox, .rtl-content .stTextInput {
             direction: rtl;
         }
-        /* Fix Plotly charts in RTL mode - isolate chart direction without affecting page RTL */
+        /* Fix Plotly charts in RTL mode */
         .js-plotly-plot {
             direction: ltr !important;
-            unicode-bidi: isolate;
+            unicode-bidi: bidi-override;
+        }
+        /* Force SVG text centering for gauge numbers */
+        .js-plotly-plot .indicatorlayer .numbers text,
+        .js-plotly-plot svg g.indicatorlayer text {
+            text-anchor: middle !important;
+            direction: ltr !important;
+        }
+        /* Ensure plot container is LTR */
+        .plot-container.plotly {
+            direction: ltr !important;
         }
     """ if lang == 'ar' else ""
 
