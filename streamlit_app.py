@@ -68,6 +68,11 @@ def inject_custom_css():
         .rtl-content .stSelectbox, .rtl-content .stTextInput {
             direction: rtl;
         }
+        /* Fix Plotly charts in RTL mode - isolate chart direction without affecting page RTL */
+        .js-plotly-plot {
+            direction: ltr !important;
+            unicode-bidi: isolate;
+        }
     """ if lang == 'ar' else ""
 
     st.markdown(f"""
