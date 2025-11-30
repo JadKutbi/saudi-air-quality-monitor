@@ -1,11 +1,11 @@
 """
 Map Visualizer Module
 
-Creates interactive Folium maps with WHO threshold-normalized heatmaps
+Creates interactive Folium maps with threshold-normalized heatmaps
 and industrial facility markers for pollution source attribution.
 
 Features:
-    - Health-based color scaling (WHO 2021 thresholds)
+    - Satellite-based color scaling (Sentinel-5P thresholds)
     - Wind direction arrows synchronized to satellite observation time
     - Factory markers with upwind/downwind status
     - Layer controls for satellite imagery overlay
@@ -74,7 +74,7 @@ class MapVisualizer:
                     else:
                         normalized = 0.8 + 0.2 * min(1.0, (p['value'] - critical_threshold) / critical_threshold)
                     heat_data_normalized.append([p['lat'], p['lon'], min(1.0, normalized)])
-                logger.info(f"WHO threshold normalization applied")
+                logger.info(f"Threshold normalization applied")
             else:
                 values = [p['value'] for p in pixels]
                 percentile_95 = np.percentile(values, 95) if len(values) > 1 else max(values)
@@ -179,7 +179,7 @@ class MapVisualizer:
         <b>📅 Time (KSA):</b> {gas_data.get('timestamp_ksa', 'N/A')}<br>
         <b>📊 Mean:</b> {gas_data['statistics'].get('mean', 0):.2f} {gas_data['unit']} |
         <b>⚠️ Peak:</b> {gas_data['statistics'].get('max', 0):.2f} {gas_data['unit']}<br>
-        <b>🏥 WHO Threshold:</b> {threshold_str} {gas_data['unit']} |
+        <b>📈 Threshold:</b> {threshold_str} {gas_data['unit']} |
         <b>🚨 Critical:</b> {critical_str} {gas_data['unit']}<br>
         <small style="color: #666;">Data: Sentinel-5P TROPOMI | Resolution: ~7km | Source: NASA/ESA</small>
         </p>
@@ -202,7 +202,7 @@ class MapVisualizer:
             <div><span style="display:inline-block; width:20px; height:12px; background:#8F3F97; border:1px solid #ccc;"></span> Severe</div>
             <div><span style="display:inline-block; width:20px; height:12px; background:#7E0023; border:1px solid #ccc;"></span> Hazardous (Critical)</div>
         </div>
-        <small style="color:#666; margin-top:5px; display:block;">Colors scaled to WHO health guidelines</small>
+        <small style="color:#666; margin-top:5px; display:block;">Colors scaled to S5P measurement thresholds</small>
         </div>
         '''
         m.get_root().html.add_child(folium.Element(legend_html))

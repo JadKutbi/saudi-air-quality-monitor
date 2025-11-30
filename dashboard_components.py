@@ -256,10 +256,10 @@ def create_insights_panel(pollution_data: Dict, city: str, validator) -> None:
             st.write(t('no_correlations_detected'))
 
 def create_historical_comparison(pollution_data: Dict) -> None:
-    """Create WHO standards comparison view"""
+    """Create satellite threshold comparison view"""
     st.subheader(f"📊 {t('who_compliance')}")
 
-    # Compare current satellite measurements against WHO 2021 guidelines
+    # Compare current satellite measurements against S5P typical ranges
     comparison_data = []
     for gas, data in pollution_data.items():
         if data.get('success'):

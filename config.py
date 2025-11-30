@@ -3,7 +3,7 @@ Saudi Arabia Air Quality Monitoring System - Configuration Module
 
 This module contains all configuration parameters for the real-time pollution
 monitoring system, including city definitions, gas monitoring specifications,
-WHO 2021 threshold values, and industrial facility locations.
+satellite-based threshold values, and industrial facility locations.
 
 Data Sources:
     - Sentinel-5P TROPOMI satellite imagery via Google Earth Engine
@@ -11,7 +11,7 @@ Data Sources:
     - Real-time weather APIs for wind synchronization
 
 Standards:
-    - WHO Air Quality Guidelines 2021
+    - Sentinel-5P L2 typical value ranges (Copernicus)
     - US EPA AQI calculation methodology
 """
 
@@ -51,7 +51,7 @@ GAS_PRODUCTS = {
         "band": "NO2_column_number_density",
         "unit": "mol/m²",
         "conversion_factor": 1e15,
-        "display_unit": "10^15 mol/cm²"
+        "display_unit": "10^15 molec/cm²"
     },
     "SO2": {
         "name": "Sulfur Dioxide",
@@ -59,7 +59,7 @@ GAS_PRODUCTS = {
         "band": "SO2_column_number_density",
         "unit": "mol/m²",
         "conversion_factor": 1e15,
-        "display_unit": "10^15 mol/cm²"
+        "display_unit": "10^15 molec/cm²"
     },
     "CO": {
         "name": "Carbon Monoxide",
@@ -67,7 +67,7 @@ GAS_PRODUCTS = {
         "band": "CO_column_number_density",
         "unit": "mol/m²",
         "conversion_factor": 1e18,
-        "display_unit": "10^18 mol/cm²"
+        "display_unit": "10^18 molec/cm²"
     },
     "HCHO": {
         "name": "Formaldehyde",
@@ -75,7 +75,7 @@ GAS_PRODUCTS = {
         "band": "tropospheric_HCHO_column_number_density",
         "unit": "mol/m²",
         "conversion_factor": 1e15,
-        "display_unit": "10^15 mol/cm²"
+        "display_unit": "10^15 molec/cm²"
     },
     "CH4": {
         "name": "Methane",
@@ -88,50 +88,79 @@ GAS_PRODUCTS = {
 }
 
 # =============================================================================
-# WHO 2021 AIR QUALITY THRESHOLDS
-# Column density thresholds derived from WHO Air Quality Guidelines 2021
-# and validated against Sentinel-5P satellite measurements
+# SATELLITE-BASED POLLUTION THRESHOLDS
+# Thresholds derived from Sentinel-5P TROPOMI typical value ranges
+# Reference: https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/S5PL2.html
+#
+# Unit Conversion (applied in satellite_fetcher.py):
+#   - Raw S5P data is in mol/m²
+#   - Converted to molecules/cm² using: mol/m² × 6.02214e19
+#   - Then scaled to display units (10^15 or 10^18 molecules/cm²)
+#
+# Threshold Logic:
+#   - "elevated": 75% of typical maximum (monitoring level)
+#   - "column_threshold": 100% of typical maximum (violation level)
+#   - "critical_threshold": 150-200% of typical maximum (severe pollution)
+#
+# S5P Typical Ranges (from documentation):
+#   NO2:  0 - 0.0003 mol/m² → 0 - 18.07 (10^15 molec/cm²), polluted cities 2-3x
+#   SO2:  0 - 0.01 mol/m²   → 0 - 602 (10^15 molec/cm²), volcanic >0.35 mol/m²
+#   CO:   0 - 0.1 mol/m²    → 0 - 6.02 (10^18 molec/cm²), wildfires exceed
+#   HCHO: 0 - 0.001 mol/m²  → 0 - 60.2 (10^15 molec/cm²), wildfires exceed
+#   CH4:  1600 - 2000 ppb   → no conversion needed
 # =============================================================================
 GAS_THRESHOLDS = {
     "NO2": {
-        "annual_avg_ugm3": 10,
-        "24h_avg_ugm3": 25,
-        "1h_avg_ugm3": 200,
-        "column_threshold": 10.0,
-        "critical_threshold": 20.0,
-        "unit": "10^15 mol/cm²",
-        "source": "WHO Air Quality Guidelines 2021"
+        # S5P typical max: 0.0003 mol/m² = 18.07 in display units
+        # Polluted cities can reach 2-3x (36-54)
+        "s5p_typical_max_mol_m2": 0.0003,
+        "elevated_threshold": 13.5,      # 75% of typical max
+        "column_threshold": 18.0,        # 100% of typical max (violation)
+        "critical_threshold": 36.0,      # 200% - heavily polluted city level
+        "unit": "10^15 molec/cm²",
+        "source": "Copernicus S5P L2 Documentation"
     },
     "SO2": {
-        "24h_avg_ugm3": 40,
-        "10min_avg_ugm3": 500,
-        "column_threshold": 2.0,
-        "critical_threshold": 5.0,
-        "unit": "10^15 mol/cm²",
-        "source": "WHO Air Quality Guidelines 2021"
+        # S5P typical max: 0.01 mol/m² = 602 in display units
+        # Industrial emissions are much lower than volcanic
+        # Using 5% of max as threshold for industrial monitoring
+        "s5p_typical_max_mol_m2": 0.01,
+        "elevated_threshold": 22.5,      # ~3.7% of max, elevated industrial
+        "column_threshold": 30.0,        # 5% of max (violation for industrial)
+        "critical_threshold": 60.0,      # 10% of max (severe industrial)
+        "unit": "10^15 molec/cm²",
+        "source": "Copernicus S5P L2 Documentation"
     },
     "CO": {
-        "24h_avg_mgm3": 4,
-        "8h_avg_mgm3": 10,
-        "1h_avg_mgm3": 35,
-        "column_threshold": 3.5,
-        "critical_threshold": 5.0,
-        "unit": "10^18 mol/cm²",
-        "source": "WHO/EPA Standards"
+        # S5P typical max: 0.1 mol/m² = 6.02 in display units
+        # Wildfires can exceed this
+        "s5p_typical_max_mol_m2": 0.1,
+        "elevated_threshold": 4.5,       # 75% of typical max
+        "column_threshold": 6.0,         # 100% of typical max (violation)
+        "critical_threshold": 9.0,       # 150% - wildfire/major event level
+        "unit": "10^18 molec/cm²",
+        "source": "Copernicus S5P L2 Documentation"
     },
     "HCHO": {
-        "30min_avg_ugm3": 100,
-        "column_threshold": 8.0,
-        "critical_threshold": 12.0,
-        "unit": "10^15 mol/cm²",
-        "source": "WHO Indoor Air Quality Guidelines"
+        # S5P typical max: 0.001 mol/m² = 60.2 in display units
+        # Wildfires can exceed this
+        "s5p_typical_max_mol_m2": 0.001,
+        "elevated_threshold": 45.0,      # 75% of typical max
+        "column_threshold": 60.0,        # 100% of typical max (violation)
+        "critical_threshold": 90.0,      # 150% - wildfire/major event level
+        "unit": "10^15 molec/cm²",
+        "source": "Copernicus S5P L2 Documentation"
     },
     "CH4": {
+        # S5P typical range: 1600 - 2000 ppb (no conversion)
+        # Background is ~1900 ppb, above 2000 is elevated
+        "s5p_typical_range_ppb": [1600, 2000],
         "background_ppb": 1900,
-        "column_threshold": 1950,
-        "critical_threshold": 2100,
+        "elevated_threshold": 1950,      # Slightly above background
+        "column_threshold": 2000,        # Top of typical range (violation)
+        "critical_threshold": 2100,      # Above typical range (methane leak)
         "unit": "ppb",
-        "source": "NOAA Global Monitoring Laboratory"
+        "source": "Copernicus S5P L2 Documentation"
     }
 }
 

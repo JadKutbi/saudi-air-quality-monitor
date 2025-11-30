@@ -38,7 +38,7 @@ class DataValidator:
     def calculate_aqi(self, gas: str, concentration: float) -> Dict:
         """
         Calculate Air Quality Index (AQI) based on concentration
-        Using US EPA and WHO standards combined
+        Using US EPA standards
 
         Returns:
             Dict with AQI value, category, color, and health implications
@@ -161,7 +161,7 @@ class DataValidator:
             validation['warnings'].append(f"Unusually high value ({value:.2f} {unit})")
             validation['quality_score'] -= 20
 
-        # Check against WHO critical thresholds
+        # Check against critical thresholds
         threshold_info = config.GAS_THRESHOLDS.get(gas, {})
         critical = threshold_info.get('critical_threshold', float('inf'))
 

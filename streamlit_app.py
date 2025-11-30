@@ -2,7 +2,7 @@
 Saudi Arabia Air Quality Monitoring System
 
 Real-time pollution monitoring using Sentinel-5P satellite data with
-AI-powered source attribution and WHO 2021 threshold compliance tracking.
+AI-powered source attribution and satellite-based threshold compliance tracking.
 
 Features:
     - Real-time satellite data from Sentinel-5P TROPOMI
@@ -292,7 +292,7 @@ def create_sidebar():
             st.markdown("""
             يراقب هذا النظام جودة الهواء باستخدام:
             - بيانات القمر الصناعي **Sentinel-5P**
-            - إرشادات **منظمة الصحة العالمية 2021**
+            - حدود **Sentinel-5P** للقياسات
             - بيانات الرياح **الفورية**
             - تحديد المصادر **بالذكاء الاصطناعي**
             """)
@@ -300,7 +300,7 @@ def create_sidebar():
             st.markdown("""
             This system monitors air quality using:
             - **Sentinel-5P** satellite data
-            - **WHO 2021** air quality guidelines
+            - **Satellite-based** measurement thresholds
             - **Real-time** wind data
             - **AI-powered** source attribution
             """)
@@ -419,7 +419,7 @@ def display_metrics(pollution_data: Dict):
                     st.error(f"{t('exceeded_by')} {exceeded:.1f}%")
 
 def display_violations(pollution_data: Dict, city: str):
-    """Display WHO threshold violations with AI-powered source attribution."""
+    """Display threshold violations with AI-powered source attribution."""
     st.subheader(f"⚠️ {t('violation_analysis')}")
 
     fetcher, analyzer, visualizer, validator, recorder = initialize_services()
@@ -710,7 +710,7 @@ def display_map(pollution_data: Dict, city: str):
         st_folium(pollution_map, width=None, height=600, returned_objects=[])
 
 def display_trends(pollution_data: Dict):
-    """Display pollution analysis charts comparing values to WHO thresholds."""
+    """Display pollution analysis charts comparing values to thresholds."""
     st.subheader(f"📈 {t('pollution_trends')}")
 
     # Create trend data with percentage of threshold
@@ -876,7 +876,7 @@ def display_trends(pollution_data: Dict):
             'Min Value': 'Min',
             'Max Value': 'Max',
             'Mean Value': 'Mean',
-            'Threshold Value': 'WHO Threshold',
+            'Threshold Value': 'S5P Threshold',
             'Max (% of Threshold)': '% of Threshold'
         })
 
@@ -1392,7 +1392,7 @@ def main():
     with col1:
         st.caption(f"**{t('data_source')}:** ESA Sentinel-5P TROPOMI")
     with col2:
-        st.caption(f"**{t('standards')}:** WHO 2021")
+        st.caption(f"**{t('standards')}:** Sentinel-5P")
     with col3:
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_time = datetime.now(ksa_tz)
