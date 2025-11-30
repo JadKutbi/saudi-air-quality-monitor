@@ -60,10 +60,11 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             fig = go.Figure(go.Indicator(
                 mode="gauge+number",
                 value=max_aqi['AQI'],
-                domain={'x': [0, 1], 'y': [0, 1]},
-                title={'text': t('overall_aqi')},
+                domain={'x': [0, 1], 'y': [0.15, 1]},
+                title={'text': t('overall_aqi'), 'font': {'size': 16}},
+                number={'font': {'size': 48}},
                 gauge={
-                    'axis': {'range': [None, 500]},
+                    'axis': {'range': [None, 500], 'tickwidth': 1},
                     'bar': {'color': max_aqi['Color']},
                     'steps': [
                         {'range': [0, 50], 'color': "#E8F5E9"},
@@ -80,7 +81,10 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                     }
                 }
             ))
-            fig.update_layout(height=250, margin=dict(l=20, r=20, t=40, b=20))
+            fig.update_layout(
+                height=280,
+                margin=dict(l=30, r=30, t=50, b=10)
+            )
             st.plotly_chart(fig, use_container_width=True)
 
         with col2:
