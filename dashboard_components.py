@@ -56,13 +56,11 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
 
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
-            # AQI Gauge
+            # AQI Gauge - use gauge only mode and add number as centered annotation
             fig = go.Figure(go.Indicator(
-                mode="gauge+number",
+                mode="gauge",
                 value=max_aqi['AQI'],
-                domain={'x': [0, 1], 'y': [0.1, 1]},
-                title={'text': t('overall_aqi'), 'font': {'size': 16}},
-                number={'font': {'size': 56}},
+                domain={'x': [0, 1], 'y': [0.15, 1]},
                 gauge={
                     'axis': {'range': [None, 500], 'tickwidth': 1},
                     'bar': {'color': max_aqi['Color']},
@@ -81,9 +79,26 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                     }
                 }
             ))
+            # Add centered number and title as annotations to avoid RTL issues
+            fig.add_annotation(
+                x=0.5, y=0.35,
+                text=f"<b>{int(max_aqi['AQI'])}</b>",
+                font=dict(size=56, color="#333"),
+                showarrow=False,
+                xanchor='center',
+                yanchor='middle'
+            )
+            fig.add_annotation(
+                x=0.5, y=0.95,
+                text=t('overall_aqi'),
+                font=dict(size=16, color="#333"),
+                showarrow=False,
+                xanchor='center',
+                yanchor='top'
+            )
             fig.update_layout(
                 height=300,
-                margin=dict(l=40, r=40, t=60, b=20),
+                margin=dict(l=40, r=40, t=30, b=20),
                 autosize=True
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
