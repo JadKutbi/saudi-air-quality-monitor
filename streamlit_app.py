@@ -130,6 +130,32 @@ def t(key: str) -> str:
     """Get translated text for current language."""
     return get_text(key, st.session_state.language)
 
+
+def format_value(value: float, gas: str) -> str:
+    """Format pollution value for display with appropriate precision.
+
+    For mol/m² values (NO2, SO2, CO, HCHO), uses scientific notation.
+    For ppb values (CH4), uses standard decimal format.
+    """
+    if value is None:
+        return "N/A"
+    if gas == "CH4":
+        # CH4 is in ppb (1600-2000 range), use standard format
+        return f"{value:.0f}"
+    else:
+        # mol/m² values are small (e.g., 0.0003), use scientific notation
+        return f"{value:.2e}"
+
+
+def format_threshold(value: float, gas: str) -> str:
+    """Format threshold value for display."""
+    if value is None:
+        return "N/A"
+    if gas == "CH4":
+        return f"{value:.0f}"
+    else:
+        return f"{value:.2e}"
+
 @st.cache_resource
 def initialize_services():
     """
@@ -399,14 +425,14 @@ def display_metrics(pollution_data: Dict):
 
             st.metric(
                 label=f"{gas} ({config.GAS_PRODUCTS[gas]['name']})",
-                value=f"{max_val:.2f}",
-                delta=f"{status} | {t('threshold')}: {threshold:.1f}",
+                value=format_value(max_val, gas),
+                delta=f"{status} | {t('threshold')}: {format_threshold(threshold, gas)}",
                 delta_color=delta_color
             )
 
             with st.expander(t('violation_details')):
-                st.write(f"**{t('mean')}:** {data['statistics']['mean']:.2f}")
-                st.write(f"**{t('min')}:** {data['statistics']['min']:.2f}")
+                st.write(f"**{t('mean')}:** {format_value(data['statistics']['mean'], gas)}")
+                st.write(f"**{t('min')}:** {format_value(data['statistics']['min'], gas)}")
                 st.write(f"**{t('type')}:** {data['unit']}")
 
                 # Show data age if available
@@ -473,8 +499,8 @@ def display_violations(pollution_data: Dict, city: str):
                 with col1:
                     st.error(f"**{violation['gas']} {t('violation_detected')}**")
                     st.write(f"**{t('severity')}:** {violation['severity'].upper()}")
-                    st.write(f"**{t('value')}:** {violation['max_value']:.2f} {violation['unit']}")
-                    st.write(f"**{t('threshold')}:** {violation['threshold']:.1f} {violation['unit']}")
+                    st.write(f"**{t('value')}:** {format_value(violation['max_value'], violation['gas'])} {violation['unit']}")
+                    st.write(f"**{t('threshold')}:** {format_threshold(violation['threshold'], violation['gas'])} {violation['unit']}")
                     st.write(f"**{t('exceeded_by')}:** {violation['percentage_over']:.1f}%")
 
                     # Add wind information
@@ -608,12 +634,12 @@ def display_map(pollution_data: Dict, city: str):
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric(f"{selected_gas} {t('max')}",
-                     f"{gas_data['statistics']['max']:.2f}",
+                     format_value(gas_data['statistics']['max'], selected_gas),
                      f"{gas_data['unit']}")
         with col2:
             st.metric(f"{selected_gas} {t('mean')}",
-                     f"{gas_data['statistics']['mean']:.2f}",
-                     f"{t('min')}: {gas_data['statistics']['min']:.2f}")
+                     format_value(gas_data['statistics']['mean'], selected_gas),
+                     f"{t('min')}: {format_value(gas_data['statistics']['min'], selected_gas)}")
         with col3:
             if gas_data.get('wind', {}).get('success'):
                 wind = gas_data['wind']
@@ -821,7 +847,7 @@ def display_trends(pollution_data: Dict):
                             x=[t('min_label_chart'), t('mean_label_chart'), t('max_label_chart')],
                             y=[min_val, mean_val, max_val],
                             marker_color=['#3b82f6', '#8b5cf6', status_color],
-                            text=[f'{min_val:.2f}', f'{mean_val:.2f}', f'{max_val:.2f}'],
+                            text=[format_value(min_val, gas), format_value(mean_val, gas), format_value(max_val, gas)],
                             textposition='outside',
                             name=gas
                         ))
@@ -831,7 +857,7 @@ def display_trends(pollution_data: Dict):
                             y=threshold,
                             line_dash="dash",
                             line_color="orange",
-                            annotation_text=f"{t('threshold_label')}: {threshold:.1f}",
+                            annotation_text=f"{t('threshold_label')}: {format_threshold(threshold, gas)}",
                             annotation_position="right"
                         )
 
@@ -841,7 +867,7 @@ def display_trends(pollution_data: Dict):
                                 y=critical,
                                 line_dash="dot",
                                 line_color="red",
-                                annotation_text=f"{t('critical_label')}: {critical:.1f}",
+                                annotation_text=f"{t('critical_label')}: {format_threshold(critical, gas)}",
                                 annotation_position="right"
                             )
 
@@ -1197,8 +1223,8 @@ def display_violation_history(city: str):
                     st.markdown(f"**{t('time_label')}:** {record['timestamp_ksa']}")
                     st.markdown(f"**{t('select_city')}:** {t(record['city'])}")
                     st.markdown(f"**{t('severity')}:** {t(record['severity']).upper()}")
-                    st.markdown(f"**{t('max')}:** {record['max_value']:.2f} {record['unit']}")
-                    st.markdown(f"**{t('threshold')}:** {record['threshold']:.1f} {record['unit']}")
+                    st.markdown(f"**{t('max')}:** {format_value(record['max_value'], record['gas'])} {record['unit']}")
+                    st.markdown(f"**{t('threshold')}:** {format_threshold(record['threshold'], record['gas'])} {record['unit']}")
                     st.markdown(f"**{t('exceeded_by')}:** {record['percentage_over']:.1f}%")
 
                     # Hotspot location

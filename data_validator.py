@@ -147,18 +147,24 @@ class DataValidator:
             validation['quality_score'] = 0
             return validation
 
-        # Check for unrealistic values based on gas type
+        # Check for unrealistic values based on gas type (in raw mol/m² or ppb)
+        # Based on Sentinel-5P typical ranges from Copernicus documentation
         max_realistic = {
-            'NO2': 1000,  # 10^15 molecules/cm²
-            'SO2': 500,
-            'CO': 100,  # 10^18 molecules/cm²
-            'O3': 600,
-            'HCHO': 50,
-            'CH4': 2000
+            'NO2': 0.001,    # mol/m² (typical max ~0.0003, polluted cities 2-3x)
+            'SO2': 0.05,     # mol/m² (typical max ~0.01, volcanic can be 0.35)
+            'CO': 0.3,       # mol/m² (typical max ~0.1, wildfires can exceed)
+            'O3': 0.5,       # mol/m² (typical max ~0.36)
+            'HCHO': 0.003,   # mol/m² (typical max ~0.001, wildfires can exceed)
+            'CH4': 2500      # ppb (typical range 1600-2000, major leaks higher)
         }
 
         if gas in max_realistic and value > max_realistic[gas]:
-            validation['warnings'].append(f"Unusually high value ({value:.2f} {unit})")
+            # Format value appropriately for display
+            if gas == 'CH4':
+                value_str = f"{value:.0f}"
+            else:
+                value_str = f"{value:.2e}"
+            validation['warnings'].append(f"Unusually high value ({value_str} {unit})")
             validation['quality_score'] -= 20
 
         # Check against critical thresholds

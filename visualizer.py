@@ -108,15 +108,20 @@ class MapVisualizer:
         # Add hotspot marker
         if hotspot:
             icon_color = 'red' if violation else 'orange'
+            # Format value based on gas type
+            if gas == "CH4":
+                value_str = f"{hotspot['value']:.0f}"
+            else:
+                value_str = f"{hotspot['value']:.2e}"
             folium.Marker(
                 location=[hotspot['lat'], hotspot['lon']],
                 popup=folium.Popup(
                     f"<b>Maximum {gas} Concentration</b><br>"
-                    f"Value: {hotspot['value']:.2f} {hotspot['unit']}<br>"
+                    f"Value: {value_str} {hotspot['unit']}<br>"
                     f"Location: {hotspot['lat']:.4f}, {hotspot['lon']:.4f}",
                     max_width=300
                 ),
-                tooltip=f"Peak {gas}: {hotspot['value']:.2f}",
+                tooltip=f"Peak {gas}: {value_str}",
                 icon=folium.Icon(color=icon_color, icon='exclamation-triangle', prefix='fa')
             ).add_to(m)
             
@@ -165,8 +170,17 @@ class MapVisualizer:
         threshold_config = config.GAS_THRESHOLDS.get(gas, {})
         threshold = threshold_config.get('column_threshold', 'N/A')
         critical = threshold_config.get('critical_threshold', 'N/A')
-        threshold_str = f"{threshold:.1f}" if isinstance(threshold, (int, float)) else "N/A"
-        critical_str = f"{critical:.1f}" if isinstance(critical, (int, float)) else "N/A"
+        # Format values based on gas type (scientific notation for mol/m², standard for ppb)
+        if gas == "CH4":
+            threshold_str = f"{threshold:.0f}" if isinstance(threshold, (int, float)) else "N/A"
+            critical_str = f"{critical:.0f}" if isinstance(critical, (int, float)) else "N/A"
+            mean_str = f"{gas_data['statistics'].get('mean', 0):.0f}"
+            peak_str = f"{gas_data['statistics'].get('max', 0):.0f}"
+        else:
+            threshold_str = f"{threshold:.2e}" if isinstance(threshold, (int, float)) else "N/A"
+            critical_str = f"{critical:.2e}" if isinstance(critical, (int, float)) else "N/A"
+            mean_str = f"{gas_data['statistics'].get('mean', 0):.2e}"
+            peak_str = f"{gas_data['statistics'].get('max', 0):.2e}"
 
         title_html = f'''
         <div style="position: fixed;
@@ -177,8 +191,8 @@ class MapVisualizer:
         <h4 style="margin:0; color: #333;">{city} - {gas_data.get("gas_name", gas)} Satellite Monitor</h4>
         <p style="margin:5px 0; line-height:1.6;">
         <b>📅 Time (KSA):</b> {gas_data.get('timestamp_ksa', 'N/A')}<br>
-        <b>📊 Mean:</b> {gas_data['statistics'].get('mean', 0):.2f} {gas_data['unit']} |
-        <b>⚠️ Peak:</b> {gas_data['statistics'].get('max', 0):.2f} {gas_data['unit']}<br>
+        <b>📊 Mean:</b> {mean_str} {gas_data['unit']} |
+        <b>⚠️ Peak:</b> {peak_str} {gas_data['unit']}<br>
         <b>📈 Threshold:</b> {threshold_str} {gas_data['unit']} |
         <b>🚨 Critical:</b> {critical_str} {gas_data['unit']}<br>
         <small style="color: #666;">Data: Sentinel-5P TROPOMI | Resolution: ~7km | Source: NASA/ESA</small>
