@@ -125,14 +125,14 @@ GAS_THRESHOLDS = {
         "source": "Calibrated for Royal Commission monitoring"
     },
     "CO": {
-        # Conservative threshold - mainly for wildfire/major event detection
+        # Industrial CO monitoring
         # Background: 33, Polluted cities: 38-42 mmol/m²
         "background": 33,
-        "elevated_threshold": 75,         # Warning level
-        "column_threshold": 100,          # Major emission event
-        "critical_threshold": 150,        # Severe event (wildfire level)
+        "elevated_threshold": 35,         # Warning level (above background)
+        "column_threshold": 40,           # Pollution event (polluted city level)
+        "critical_threshold": 60,         # Severe event
         "unit": "mmol/m²",
-        "source": "Copernicus S5P L2 Documentation"
+        "source": "Calibrated for Royal Commission monitoring"
     },
     "HCHO": {
         # Leak Detector - fugitive VOC emissions from storage tanks
