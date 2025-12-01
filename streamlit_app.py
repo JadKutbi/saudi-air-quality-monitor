@@ -433,7 +433,7 @@ def display_metrics(pollution_data: Dict):
             with st.expander(t('violation_details')):
                 st.write(f"**{t('mean')}:** {format_value(data['statistics']['mean'], gas)}")
                 st.write(f"**{t('min')}:** {format_value(data['statistics']['min'], gas)}")
-                st.write(f"**{t('type')}:** {data['unit']}")
+                st.write(f"**{t('unit_label')}:** {data['unit']}")
 
                 # Show data age if available
                 if data.get('data_age_label'):
