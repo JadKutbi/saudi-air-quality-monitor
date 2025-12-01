@@ -84,75 +84,73 @@ GAS_PRODUCTS = {
 
 # =============================================================================
 # SATELLITE-BASED POLLUTION THRESHOLDS
-# Thresholds derived from Sentinel-5P TROPOMI typical value ranges
+# Calibrated for Royal Commission industrial area monitoring
 # Reference: https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/S5PL2.html
 #
-# Units: Converted from raw Sentinel-5P data for readability
+# Units:
 #   - NO2, SO2, CO, HCHO: mmol/m² (millimoles per square meter)
 #   - CH4: ppb (column averaged dry air mixing ratio)
 #
 # Threshold Logic:
-#   - "elevated": 75% of typical maximum (monitoring level)
-#   - "column_threshold": 100% of typical maximum (violation level)
-#   - "critical_threshold": 150-200% of typical maximum (severe pollution)
+#   - "elevated": ~75% of violation threshold (monitoring/warning level)
+#   - "column_threshold": Violation level (confirmed pollution event)
+#   - "critical_threshold": ~200% of violation (severe event)
 #
-# S5P Typical Ranges (from Copernicus documentation, converted to mmol/m²):
-#   NO2:  0 - 0.3 mmol/m²   (polluted cities may reach 2-3x upper value)
-#   SO2:  0 - 10 mmol/m²    (volcanic events exceed 350 mmol/m²)
-#   CO:   0 - 100 mmol/m²   (wildfires may exceed this)
-#   HCHO: 0 - 1 mmol/m²     (wildfires may exceed this)
-#   CH4:  1600 - 2000 ppb
+# Global Background Levels (for reference):
+#   NO2:  0.025 mmol/m² (polluted cities: 0.07-0.12 mmol/m²)
+#   SO2:  0.1 mmol/m²   (polluted cities: 0.35-0.5 mmol/m²)
+#   CO:   33 mmol/m²    (polluted cities: 38-42 mmol/m²)
+#   HCHO: 0.017 mmol/m² (polluted cities: 0.2-0.27 mmol/m²)
+#   CH4:  1850-1900 ppb
 # =============================================================================
 GAS_THRESHOLDS = {
     "NO2": {
-        # S5P typical max: 0.3 mmol/m²
-        # Polluted cities can reach 2-3x (0.6 - 0.9 mmol/m²)
-        "s5p_typical_max": 0.3,
-        "elevated_threshold": 0.225,      # 75% of typical max
-        "column_threshold": 0.3,          # 100% of typical max (violation)
-        "critical_threshold": 0.6,        # 200% - heavily polluted city level
+        # High Emission Event threshold for industrial monitoring
+        # Background: 0.025, Polluted cities: 0.07-0.12 mmol/m²
+        "background": 0.025,
+        "elevated_threshold": 0.11,       # Warning level (~75% of violation)
+        "column_threshold": 0.15,         # High Emission Event
+        "critical_threshold": 0.30,       # Severe emission (2x violation)
         "unit": "mmol/m²",
-        "source": "Copernicus S5P L2 Documentation"
+        "source": "Calibrated for Royal Commission monitoring"
     },
     "SO2": {
-        # S5P typical max: 10 mmol/m²
-        # Industrial emissions are much lower than volcanic
-        # Using lower thresholds for industrial area monitoring
-        "s5p_typical_max": 10,
-        "elevated_threshold": 0.5,        # 5% of max, elevated industrial
-        "column_threshold": 1.0,          # 10% of max (violation for industrial)
-        "critical_threshold": 5.0,        # 50% of max (severe industrial)
+        # Desulfurization Issue / heavy flaring detection
+        # Background: 0.1, Polluted cities: 0.35-0.5 mmol/m²
+        "background": 0.1,
+        "elevated_threshold": 0.45,       # Warning level (~75% of violation)
+        "column_threshold": 0.60,         # Desulfurization Issue / flaring
+        "critical_threshold": 1.20,       # Severe event (2x violation)
         "unit": "mmol/m²",
-        "source": "Copernicus S5P L2 Documentation"
+        "source": "Calibrated for Royal Commission monitoring"
     },
     "CO": {
-        # S5P typical max: 100 mmol/m²
-        # Wildfires can exceed this
-        "s5p_typical_max": 100,
-        "elevated_threshold": 75,         # 75% of typical max
-        "column_threshold": 100,          # 100% of typical max (violation)
-        "critical_threshold": 150,        # 150% - wildfire/major event level
+        # Conservative threshold - mainly for wildfire/major event detection
+        # Background: 33, Polluted cities: 38-42 mmol/m²
+        "background": 33,
+        "elevated_threshold": 75,         # Warning level
+        "column_threshold": 100,          # Major emission event
+        "critical_threshold": 150,        # Severe event (wildfire level)
         "unit": "mmol/m²",
         "source": "Copernicus S5P L2 Documentation"
     },
     "HCHO": {
-        # S5P typical max: 1 mmol/m²
-        # Wildfires can exceed this
-        "s5p_typical_max": 1.0,
-        "elevated_threshold": 0.75,       # 75% of typical max
-        "column_threshold": 1.0,          # 100% of typical max (violation)
-        "critical_threshold": 1.5,        # 150% - wildfire/major event level
+        # Leak Detector - fugitive VOC emissions from storage tanks
+        # Background: 0.017, Polluted cities: 0.2-0.27 mmol/m²
+        "background": 0.017,
+        "elevated_threshold": 0.30,       # Warning level (~75% of violation)
+        "column_threshold": 0.40,         # Fugitive VOC emission detected
+        "critical_threshold": 0.80,       # Severe leak (2x violation)
         "unit": "mmol/m²",
-        "source": "Copernicus S5P L2 Documentation"
+        "source": "Calibrated for Royal Commission monitoring"
     },
     "CH4": {
-        # S5P typical range: 1600 - 2000 ppb (no conversion needed)
-        # Background is ~1900 ppb, above 2000 is elevated
-        "s5p_typical_range": [1600, 2000],
+        # Methane leak detection
+        # Background: 1850-1900 ppb
         "background": 1900,
         "elevated_threshold": 1950,       # Slightly above background
-        "column_threshold": 2000,         # Top of typical range (violation)
-        "critical_threshold": 2100,       # Above typical range (methane leak)
+        "column_threshold": 2000,         # Potential methane leak
+        "critical_threshold": 2100,       # Confirmed leak event
         "unit": "ppb",
         "source": "Copernicus S5P L2 Documentation"
     }
