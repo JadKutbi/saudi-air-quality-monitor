@@ -49,29 +49,29 @@ GAS_PRODUCTS = {
         "name": "Nitrogen Dioxide",
         "dataset": "COPERNICUS/S5P/NRTI/L3_NO2",
         "band": "NO2_column_number_density",
-        "unit": "mol/m²",
-        "display_unit": "mol/m²"
+        "unit": "mmol/m²",
+        "display_unit": "mmol/m²"
     },
     "SO2": {
         "name": "Sulfur Dioxide",
         "dataset": "COPERNICUS/S5P/NRTI/L3_SO2",
         "band": "SO2_column_number_density",
-        "unit": "mol/m²",
-        "display_unit": "mol/m²"
+        "unit": "mmol/m²",
+        "display_unit": "mmol/m²"
     },
     "CO": {
         "name": "Carbon Monoxide",
         "dataset": "COPERNICUS/S5P/NRTI/L3_CO",
         "band": "CO_column_number_density",
-        "unit": "mol/m²",
-        "display_unit": "mol/m²"
+        "unit": "mmol/m²",
+        "display_unit": "mmol/m²"
     },
     "HCHO": {
         "name": "Formaldehyde",
         "dataset": "COPERNICUS/S5P/NRTI/L3_HCHO",
         "band": "tropospheric_HCHO_column_number_density",
-        "unit": "mol/m²",
-        "display_unit": "mol/m²"
+        "unit": "mmol/m²",
+        "display_unit": "mmol/m²"
     },
     "CH4": {
         "name": "Methane",
@@ -87,8 +87,8 @@ GAS_PRODUCTS = {
 # Thresholds derived from Sentinel-5P TROPOMI typical value ranges
 # Reference: https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Data/S5PL2.html
 #
-# Units: Raw Sentinel-5P data (no conversion applied)
-#   - NO2, SO2, CO, HCHO: mol/m² (tropospheric/total column)
+# Units: Converted from raw Sentinel-5P data for readability
+#   - NO2, SO2, CO, HCHO: mmol/m² (millimoles per square meter)
 #   - CH4: ppb (column averaged dry air mixing ratio)
 #
 # Threshold Logic:
@@ -96,53 +96,53 @@ GAS_PRODUCTS = {
 #   - "column_threshold": 100% of typical maximum (violation level)
 #   - "critical_threshold": 150-200% of typical maximum (severe pollution)
 #
-# S5P Typical Ranges (from Copernicus documentation):
-#   NO2:  0 - 0.0003 mol/m²  (polluted cities may reach 2-3x upper value)
-#   SO2:  0 - 0.01 mol/m²    (volcanic events exceed 0.35 mol/m²)
-#   CO:   0 - 0.1 mol/m²     (wildfires may exceed this)
-#   HCHO: 0 - 0.001 mol/m²   (wildfires may exceed this)
+# S5P Typical Ranges (from Copernicus documentation, converted to mmol/m²):
+#   NO2:  0 - 0.3 mmol/m²   (polluted cities may reach 2-3x upper value)
+#   SO2:  0 - 10 mmol/m²    (volcanic events exceed 350 mmol/m²)
+#   CO:   0 - 100 mmol/m²   (wildfires may exceed this)
+#   HCHO: 0 - 1 mmol/m²     (wildfires may exceed this)
 #   CH4:  1600 - 2000 ppb
 # =============================================================================
 GAS_THRESHOLDS = {
     "NO2": {
-        # S5P typical max: 0.0003 mol/m²
-        # Polluted cities can reach 2-3x (0.0006 - 0.0009 mol/m²)
-        "s5p_typical_max": 0.0003,
-        "elevated_threshold": 0.000225,   # 75% of typical max
-        "column_threshold": 0.0003,       # 100% of typical max (violation)
-        "critical_threshold": 0.0006,     # 200% - heavily polluted city level
-        "unit": "mol/m²",
+        # S5P typical max: 0.3 mmol/m²
+        # Polluted cities can reach 2-3x (0.6 - 0.9 mmol/m²)
+        "s5p_typical_max": 0.3,
+        "elevated_threshold": 0.225,      # 75% of typical max
+        "column_threshold": 0.3,          # 100% of typical max (violation)
+        "critical_threshold": 0.6,        # 200% - heavily polluted city level
+        "unit": "mmol/m²",
         "source": "Copernicus S5P L2 Documentation"
     },
     "SO2": {
-        # S5P typical max: 0.01 mol/m²
+        # S5P typical max: 10 mmol/m²
         # Industrial emissions are much lower than volcanic
         # Using lower thresholds for industrial area monitoring
-        "s5p_typical_max": 0.01,
-        "elevated_threshold": 0.0005,     # 5% of max, elevated industrial
-        "column_threshold": 0.001,        # 10% of max (violation for industrial)
-        "critical_threshold": 0.005,      # 50% of max (severe industrial)
-        "unit": "mol/m²",
+        "s5p_typical_max": 10,
+        "elevated_threshold": 0.5,        # 5% of max, elevated industrial
+        "column_threshold": 1.0,          # 10% of max (violation for industrial)
+        "critical_threshold": 5.0,        # 50% of max (severe industrial)
+        "unit": "mmol/m²",
         "source": "Copernicus S5P L2 Documentation"
     },
     "CO": {
-        # S5P typical max: 0.1 mol/m²
+        # S5P typical max: 100 mmol/m²
         # Wildfires can exceed this
-        "s5p_typical_max": 0.1,
-        "elevated_threshold": 0.075,      # 75% of typical max
-        "column_threshold": 0.1,          # 100% of typical max (violation)
-        "critical_threshold": 0.15,       # 150% - wildfire/major event level
-        "unit": "mol/m²",
+        "s5p_typical_max": 100,
+        "elevated_threshold": 75,         # 75% of typical max
+        "column_threshold": 100,          # 100% of typical max (violation)
+        "critical_threshold": 150,        # 150% - wildfire/major event level
+        "unit": "mmol/m²",
         "source": "Copernicus S5P L2 Documentation"
     },
     "HCHO": {
-        # S5P typical max: 0.001 mol/m²
+        # S5P typical max: 1 mmol/m²
         # Wildfires can exceed this
-        "s5p_typical_max": 0.001,
-        "elevated_threshold": 0.00075,    # 75% of typical max
-        "column_threshold": 0.001,        # 100% of typical max (violation)
-        "critical_threshold": 0.0015,     # 150% - wildfire/major event level
-        "unit": "mol/m²",
+        "s5p_typical_max": 1.0,
+        "elevated_threshold": 0.75,       # 75% of typical max
+        "column_threshold": 1.0,          # 100% of typical max (violation)
+        "critical_threshold": 1.5,        # 150% - wildfire/major event level
+        "unit": "mmol/m²",
         "source": "Copernicus S5P L2 Documentation"
     },
     "CH4": {

@@ -254,16 +254,20 @@ class SatelliteDataFetcher:
             if sample_count > 0:
                 sample_list = samples.toList(sample_count).getInfo()
 
-                # Extract pixel data (use raw values, no conversion)
+                # Extract pixel data and convert to display units
                 for sample in sample_list:
                     props = sample['properties']
                     if gas_config["band"] in props and props[gas_config["band"]] is not None:
                         raw_value = props[gas_config["band"]]
-                        # Use raw value directly (mol/m² for most gases, ppb for CH4)
+                        # Convert mol/m² to mmol/m² for readability (CH4 stays in ppb)
+                        if gas == "CH4":
+                            value = raw_value
+                        else:
+                            value = raw_value * 1000  # mol/m² to mmol/m²
                         pixels.append({
                             'lat': props['latitude'],
                             'lon': props['longitude'],
-                            'value': raw_value
+                            'value': value
                         })
 
             # Get min value and count from stats (already have mean and max from loop above)
@@ -277,16 +281,22 @@ class SatelliteDataFetcher:
                 return self._create_empty_response(city, gas,
                     error=f"Data processing failed - insufficient cloud-free pixels")
             
-            # Use raw values directly (mol/m² for most gases, ppb for CH4)
+            # Convert mol/m² to mmol/m² for readability (CH4 stays in ppb)
             # Clamp all negative values to zero for cleaner display
             if mean_val is not None:
                 mean_val = max(0.0, mean_val)
+                if gas != "CH4":
+                    mean_val = mean_val * 1000  # mol/m² to mmol/m²
 
             if max_val is not None:
                 max_val = max(0.0, max_val)
+                if gas != "CH4":
+                    max_val = max_val * 1000  # mol/m² to mmol/m²
 
             if min_val is not None:
                 min_val = max(0.0, min_val)
+                if gas != "CH4":
+                    min_val = min_val * 1000  # mol/m² to mmol/m²
 
 
 

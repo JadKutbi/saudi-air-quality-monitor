@@ -134,17 +134,20 @@ def t(key: str) -> str:
 def format_value(value: float, gas: str) -> str:
     """Format pollution value for display with appropriate precision.
 
-    For mol/m² values (NO2, SO2, CO, HCHO), uses scientific notation.
-    For ppb values (CH4), uses standard decimal format.
+    For mmol/m² values (NO2, SO2, CO, HCHO), uses decimal format.
+    For ppb values (CH4), uses standard integer format.
     """
     if value is None:
         return "N/A"
     if gas == "CH4":
-        # CH4 is in ppb (1600-2000 range), use standard format
+        # CH4 is in ppb (1600-2000 range), use integer format
         return f"{value:.0f}"
+    elif gas == "CO":
+        # CO values are larger (typically 20-40 mmol/m²), use 1 decimal
+        return f"{value:.1f}"
     else:
-        # mol/m² values are small (e.g., 0.0003), use scientific notation
-        return f"{value:.2e}"
+        # NO2, SO2, HCHO are smaller (typically 0.1-1 mmol/m²), use 2 decimals
+        return f"{value:.2f}"
 
 
 def format_threshold(value: float, gas: str) -> str:
@@ -153,8 +156,10 @@ def format_threshold(value: float, gas: str) -> str:
         return "N/A"
     if gas == "CH4":
         return f"{value:.0f}"
+    elif gas == "CO":
+        return f"{value:.0f}"
     else:
-        return f"{value:.2e}"
+        return f"{value:.2f}"
 
 @st.cache_resource
 def initialize_services():

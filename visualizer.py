@@ -108,11 +108,13 @@ class MapVisualizer:
         # Add hotspot marker
         if hotspot:
             icon_color = 'red' if violation else 'orange'
-            # Format value based on gas type
+            # Format value based on gas type (mmol/m² or ppb)
             if gas == "CH4":
                 value_str = f"{hotspot['value']:.0f}"
+            elif gas == "CO":
+                value_str = f"{hotspot['value']:.1f}"
             else:
-                value_str = f"{hotspot['value']:.2e}"
+                value_str = f"{hotspot['value']:.2f}"
             folium.Marker(
                 location=[hotspot['lat'], hotspot['lon']],
                 popup=folium.Popup(
@@ -170,17 +172,22 @@ class MapVisualizer:
         threshold_config = config.GAS_THRESHOLDS.get(gas, {})
         threshold = threshold_config.get('column_threshold', 'N/A')
         critical = threshold_config.get('critical_threshold', 'N/A')
-        # Format values based on gas type (scientific notation for mol/m², standard for ppb)
+        # Format values based on gas type (mmol/m² or ppb)
         if gas == "CH4":
             threshold_str = f"{threshold:.0f}" if isinstance(threshold, (int, float)) else "N/A"
             critical_str = f"{critical:.0f}" if isinstance(critical, (int, float)) else "N/A"
             mean_str = f"{gas_data['statistics'].get('mean', 0):.0f}"
             peak_str = f"{gas_data['statistics'].get('max', 0):.0f}"
+        elif gas == "CO":
+            threshold_str = f"{threshold:.0f}" if isinstance(threshold, (int, float)) else "N/A"
+            critical_str = f"{critical:.0f}" if isinstance(critical, (int, float)) else "N/A"
+            mean_str = f"{gas_data['statistics'].get('mean', 0):.1f}"
+            peak_str = f"{gas_data['statistics'].get('max', 0):.1f}"
         else:
-            threshold_str = f"{threshold:.2e}" if isinstance(threshold, (int, float)) else "N/A"
-            critical_str = f"{critical:.2e}" if isinstance(critical, (int, float)) else "N/A"
-            mean_str = f"{gas_data['statistics'].get('mean', 0):.2e}"
-            peak_str = f"{gas_data['statistics'].get('max', 0):.2e}"
+            threshold_str = f"{threshold:.2f}" if isinstance(threshold, (int, float)) else "N/A"
+            critical_str = f"{critical:.2f}" if isinstance(critical, (int, float)) else "N/A"
+            mean_str = f"{gas_data['statistics'].get('mean', 0):.2f}"
+            peak_str = f"{gas_data['statistics'].get('max', 0):.2f}"
 
         title_html = f'''
         <div style="position: fixed;
