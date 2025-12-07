@@ -23,7 +23,7 @@ class EnhancedWindFetcher:
     2. METAR airport data (hourly updates)
     3. OpenWeatherMap (real-time current + 1hr forecast)
     4. Tomorrow.io (1-minute temporal resolution)
-    5. WeatherAPI.com (real-time + historical)
+    5. Visual Crossing (historical data)
     6. ERA5-Land hourly reanalysis (5-day lag but hourly)
     7. NOAA GFS (6-hourly, interpolated)
     """
@@ -32,7 +32,6 @@ class EnhancedWindFetcher:
         self.api_keys = {
             'openweather': os.getenv('OPENWEATHER_API_KEY'),
             'tomorrow': os.getenv('TOMORROW_IO_API_KEY'),
-            'weatherapi': os.getenv('WEATHERAPI_KEY'),
             'meteomatics': os.getenv('METEOMATICS_USER'),  # user:password format
             'visualcrossing': os.getenv('VISUALCROSSING_KEY')
         }
@@ -102,20 +101,17 @@ class EnhancedWindFetcher:
                 ('openweather', self._fetch_openweather_realtime),
                 ('tomorrow_io', self._fetch_tomorrow_io),
                 ('metar', self._fetch_metar_wind),
-                ('weatherapi', self._fetch_weatherapi_historical),
             ]
         elif hours_ago <= 24:
             # Within 24 hours - Tomorrow.io works great
             sources = [
                 ('tomorrow_io', self._fetch_tomorrow_io),
-                ('weatherapi', self._fetch_weatherapi_historical),
                 ('openweather', self._fetch_openweather_realtime),
                 ('metar', self._fetch_metar_wind),
             ]
         else:
             # Over 24 hours - use historical sources only
             sources = [
-                ('weatherapi', self._fetch_weatherapi_historical),
                 ('visualcrossing', self._fetch_visualcrossing),
                 ('era5_hourly', self._fetch_era5_hourly),
                 ('metar', self._fetch_metar_wind),
@@ -372,84 +368,6 @@ class EnhancedWindFetcher:
 
         return None
 
-    def _fetch_weatherapi_historical(self, city: str, target_time: datetime) -> Optional[Dict]:
-        """
-        WeatherAPI.com - Good historical data with hourly resolution
-        Free tier includes 7 days of history
-        """
-        if not self.api_keys['weatherapi']:
-            return None
-
-        station = self.weather_stations[city]
-
-        # Check if date is within the last 7 days (free tier limit)
-        now = datetime.now(pytz.UTC)
-        days_ago = (now - target_time).days
-
-        if days_ago > 7:
-            logger.debug(f"WeatherAPI: Date {target_time} is beyond 7-day history limit")
-            return None
-
-        # WeatherAPI historical endpoint
-        base_url = "http://api.weatherapi.com/v1/history.json"
-
-        params = {
-            'key': self.api_keys['weatherapi'],
-            'q': f"{station['lat']},{station['lon']}",
-            'dt': target_time.strftime('%Y-%m-%d')
-        }
-
-        try:
-            response = requests.get(base_url, params=params, timeout=10)
-
-            if response.status_code == 200:
-                data = response.json()
-
-                # Parse forecast data
-                forecast = data.get('forecast', {}).get('forecastday', [])
-                if forecast and len(forecast) > 0:
-                    hours = forecast[0].get('hour', [])
-
-                    # Find closest hour
-                    closest_hour = None
-                    min_diff = float('inf')
-                    target_hour = target_time.hour
-
-                    for hour_data in hours:
-                        # Use epoch time which is more reliable
-                        epoch_time = hour_data.get('time_epoch')
-                        if epoch_time:
-                            try:
-                                # Convert epoch to datetime
-                                hour_time = datetime.fromtimestamp(epoch_time, pytz.UTC)
-
-                                diff = abs((hour_time - target_time).total_seconds())
-                                if diff < min_diff:
-                                    min_diff = diff
-                                    closest_hour = hour_data
-                                    closest_time = hour_time
-                            except Exception as e:
-                                logger.debug(f"Error parsing hour data: {e}")
-                                continue
-
-                    if closest_hour:
-                        return {
-                            'direction_deg': closest_hour.get('wind_degree', 0),
-                            'speed_ms': closest_hour.get('wind_kph', 0) / 3.6,  # Convert kph to m/s
-                            'observation_time': closest_time,
-                            'direction_cardinal': closest_hour.get('wind_dir', 'N')
-                        }
-
-            elif response.status_code == 400:
-                logger.debug(f"WeatherAPI bad request: {response.text}")
-            else:
-                logger.debug(f"WeatherAPI returned status {response.status_code}")
-
-        except Exception as e:
-            logger.debug(f"WeatherAPI error: {e}")
-
-        return None
-
     def _fetch_visualcrossing(self, city: str, target_time: datetime) -> Optional[Dict]:
         """
         Visual Crossing - Excellent historical weather with hourly data
@@ -586,7 +504,6 @@ class EnhancedWindFetcher:
             'metar': 95,            # Airport observations
             'tomorrow_io': 95,      # 1-minute resolution
             'openweather': 90,      # 10-minute updates
-            'weatherapi': 85,       # Hourly historical
             'visualcrossing': 85,   # Multiple sources
             'era5_hourly': 90,      # High quality reanalysis
             'gfs_interpolated': 70, # 6-hourly interpolated
@@ -629,7 +546,6 @@ class EnhancedWindFetcher:
             'metar': "Airport weather observation",
             'tomorrow_io': "High-resolution weather API",
             'openweather': "Real-time weather service",
-            'weatherapi': "Historical weather data",
             'visualcrossing': "Multi-source weather data",
             'era5_hourly': "ERA5 reanalysis data",
             'gfs_interpolated': "GFS model interpolated",
