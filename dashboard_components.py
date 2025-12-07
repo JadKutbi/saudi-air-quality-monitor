@@ -161,6 +161,82 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
     else:
         st.warning(t('no_data_for_index'))
 
+def create_gas_health_effects_panel(pollution_data: Dict, validator) -> None:
+    """Create detailed health effects panel for each gas"""
+    st.subheader(f"⚠️ {t('health_effects_title')}")
+
+    st.caption(t('health_effects_note'))
+
+    # Get gases with elevated levels (sorted by severity)
+    gas_status = []
+    for gas, data in pollution_data.items():
+        if data.get('success'):
+            spi_info = validator.calculate_satellite_pollution_index(gas, data['statistics']['max'])
+            if spi_info['index'] is not None:
+                gas_status.append({
+                    'gas': gas,
+                    'percentage': spi_info['percentage'],
+                    'category': spi_info['category'],
+                    'color': spi_info['color'],
+                    'value': data['statistics']['max'],
+                    'unit': data['unit']
+                })
+
+    # Sort by severity (percentage of threshold)
+    gas_status.sort(key=lambda x: x['percentage'], reverse=True)
+
+    if not gas_status:
+        st.info(t('no_data_available'))
+        return
+
+    # Display health effects for each gas
+    for item in gas_status:
+        gas = item['gas']
+        pct = item['percentage']
+
+        # Determine severity styling
+        if pct >= 100:
+            severity_color = "#dc2626"  # Red
+            severity_bg = "#fee2e2"
+            severity_icon = "🔴"
+            severity_text = t('critical') if pct >= 150 else t('violation')
+        elif pct >= 75:
+            severity_color = "#f59e0b"  # Orange
+            severity_bg = "#fef3c7"
+            severity_icon = "🟡"
+            severity_text = t('spi_elevated')
+        else:
+            severity_color = "#10b981"  # Green
+            severity_bg = "#d1fae5"
+            severity_icon = "🟢"
+            severity_text = t('normal')
+
+        with st.expander(f"{severity_icon} **{gas}** - {config.GAS_PRODUCTS[gas]['name']} ({pct:.0f}% {t('of_threshold_label')})", expanded=(pct >= 75)):
+            # Current level indicator
+            st.markdown(f"""
+            <div style="background-color: {severity_bg}; border-left: 4px solid {severity_color}; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
+                <strong>{t('current_exposure_level')}:</strong> {severity_text} ({item['value']:.2f} {item['unit']})
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Health effects in columns
+            col1, col2 = st.columns(2)
+
+            with col1:
+                st.markdown(f"**🩺 {t('short_term_effects')}:**")
+                st.write(t(f'{gas}_effects_short'))
+
+                st.markdown(f"**⏳ {t('long_term_effects')}:**")
+                st.write(t(f'{gas}_effects_long'))
+
+            with col2:
+                st.markdown(f"**👥 {t('sensitive_groups')}:**")
+                st.warning(t(f'{gas}_sensitive'))
+
+                st.markdown(f"**🔍 {t('symptoms_to_watch')}:**")
+                st.info(t(f'{gas}_symptoms'))
+
+
 def create_health_risk_panel(pollution_data: Dict, validator) -> None:
     """Create health risk assessment panel"""
     st.subheader(f"🏥 {t('health_risk_assessment')}")

@@ -34,6 +34,7 @@ from violation_recorder import ViolationRecorder
 from translations import get_text, get_direction, get_font_family, TRANSLATIONS
 from dashboard_components import (
     create_aqi_dashboard,
+    create_gas_health_effects_panel,
     create_health_risk_panel,
     create_data_quality_panel,
     create_insights_panel,
@@ -1388,6 +1389,10 @@ def main():
 
         # Health Risk Panel
         create_health_risk_panel(pollution_data, validator)
+        st.divider()
+
+        # Detailed Health Effects Panel
+        create_gas_health_effects_panel(pollution_data, validator)
 
     with tab3:
         st.header(f"🗺️ {t('pollution_map')} - {t(city)}")

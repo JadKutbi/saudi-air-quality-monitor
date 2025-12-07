@@ -403,6 +403,45 @@ Sentinel-5P satellite data measures **total column density** (mmol/m²) - the to
         "quality_fair": "Fair",
         "quality_poor": "Poor",
 
+        # Gas-specific health effects
+        "health_effects_title": "Health Effects of Elevated Gases",
+        "short_term_effects": "Short-term Exposure",
+        "long_term_effects": "Long-term Exposure",
+        "sensitive_groups": "Sensitive Groups",
+        "symptoms_to_watch": "Symptoms to Watch",
+        "current_exposure_level": "Current Exposure Level",
+        "health_effects_note": "Health effects depend on concentration, duration of exposure, and individual sensitivity.",
+
+        # NO2 Health Effects
+        "NO2_effects_short": "Irritation of airways, coughing, wheezing, difficulty breathing. Can trigger asthma attacks and reduce lung function within hours of exposure.",
+        "NO2_effects_long": "Increased susceptibility to respiratory infections, chronic bronchitis, reduced lung development in children, and may contribute to cardiovascular disease.",
+        "NO2_sensitive": "Children, elderly, asthmatics, people with respiratory or heart conditions",
+        "NO2_symptoms": "Coughing, wheezing, shortness of breath, chest tightness, irritated throat",
+
+        # SO2 Health Effects
+        "SO2_effects_short": "Bronchoconstriction, breathing difficulties, and irritation of eyes, nose, and throat. Asthmatics may experience attacks within 10 minutes of exposure.",
+        "SO2_effects_long": "Aggravation of existing respiratory and cardiovascular diseases, increased hospital admissions, premature mortality in areas with chronic exposure.",
+        "SO2_sensitive": "Asthmatics (especially exercise-induced), children, elderly, people with heart or lung disease",
+        "SO2_symptoms": "Burning sensation in nose/throat, difficulty breathing, eye irritation, chest pain",
+
+        # CO Health Effects
+        "CO_effects_short": "Headache, dizziness, confusion, nausea, fatigue. At high levels: impaired vision, coordination problems, loss of consciousness, death.",
+        "CO_effects_long": "Cardiovascular effects, neurological damage. Chronic low-level exposure linked to heart disease and cognitive impairment.",
+        "CO_sensitive": "Pregnant women (fetal harm), infants, elderly, people with heart disease or anemia",
+        "CO_symptoms": "Headache, dizziness, weakness, nausea, vomiting, chest pain, confusion",
+
+        # HCHO Health Effects
+        "HCHO_effects_short": "Eye, nose, and throat irritation, watery eyes, coughing, skin irritation. Higher concentrations can cause severe respiratory distress.",
+        "HCHO_effects_long": "Classified as human carcinogen (causes nasopharyngeal cancer, leukemia). Chronic exposure linked to respiratory sensitization and allergies.",
+        "HCHO_sensitive": "Children, elderly, people with asthma or chemical sensitivities, workers in industries with formaldehyde exposure",
+        "HCHO_symptoms": "Burning eyes, runny nose, sore throat, coughing, skin rash, difficulty breathing",
+
+        # CH4 Health Effects
+        "CH4_effects_short": "At very high concentrations: dizziness, headache, nausea, asphyxiation risk in enclosed spaces. Displaces oxygen.",
+        "CH4_effects_long": "Not directly toxic but is a potent greenhouse gas. Industrial leaks indicate possible exposure to associated hazardous compounds (H2S, VOCs).",
+        "CH4_sensitive": "Workers in confined spaces, people near industrial facilities or landfills",
+        "CH4_symptoms": "Headache, dizziness, nausea, rapid breathing (in high concentration/low oxygen environments)",
+
         # Chart and display texts
         "threshold_label": "Threshold",
         "critical_label": "Critical",
@@ -813,6 +852,45 @@ Sentinel-5P satellite data measures **total column density** (mmol/m²) - the to
         "quality_good": "جيد",
         "quality_fair": "مقبول",
         "quality_poor": "ضعيف",
+
+        # Gas-specific health effects
+        "health_effects_title": "التأثيرات الصحية للغازات المرتفعة",
+        "short_term_effects": "التعرض قصير المدى",
+        "long_term_effects": "التعرض طويل المدى",
+        "sensitive_groups": "الفئات الحساسة",
+        "symptoms_to_watch": "الأعراض التي يجب مراقبتها",
+        "current_exposure_level": "مستوى التعرض الحالي",
+        "health_effects_note": "تعتمد التأثيرات الصحية على التركيز ومدة التعرض والحساسية الفردية.",
+
+        # NO2 Health Effects
+        "NO2_effects_short": "تهيج المجاري الهوائية، السعال، الصفير، صعوبة التنفس. يمكن أن يحفز نوبات الربو ويقلل وظائف الرئة خلال ساعات من التعرض.",
+        "NO2_effects_long": "زيادة القابلية للعدوى التنفسية، التهاب الشعب الهوائية المزمن، تأخر نمو الرئة عند الأطفال، وقد يساهم في أمراض القلب والأوعية الدموية.",
+        "NO2_sensitive": "الأطفال، كبار السن، مرضى الربو، الأشخاص الذين يعانون من أمراض تنفسية أو قلبية",
+        "NO2_symptoms": "السعال، الصفير، ضيق التنفس، ضيق الصدر، تهيج الحلق",
+
+        # SO2 Health Effects
+        "SO2_effects_short": "انقباض القصبات الهوائية، صعوبات التنفس، وتهيج العينين والأنف والحلق. قد يعاني مرضى الربو من نوبات خلال 10 دقائق من التعرض.",
+        "SO2_effects_long": "تفاقم أمراض الجهاز التنفسي والقلب الموجودة، زيادة حالات دخول المستشفى، الوفاة المبكرة في المناطق ذات التعرض المزمن.",
+        "SO2_sensitive": "مرضى الربو (خاصة الربو الناجم عن التمارين)، الأطفال، كبار السن، الأشخاص الذين يعانون من أمراض القلب أو الرئة",
+        "SO2_symptoms": "إحساس بالحرقة في الأنف/الحلق، صعوبة التنفس، تهيج العين، ألم في الصدر",
+
+        # CO Health Effects
+        "CO_effects_short": "الصداع، الدوخة، الارتباك، الغثيان، التعب. عند المستويات العالية: ضعف الرؤية، مشاكل التنسيق، فقدان الوعي، الوفاة.",
+        "CO_effects_long": "تأثيرات على القلب والأوعية الدموية، تلف عصبي. يرتبط التعرض المزمن منخفض المستوى بأمراض القلب والضعف الإدراكي.",
+        "CO_sensitive": "النساء الحوامل (ضرر للجنين)، الرضع، كبار السن، الأشخاص الذين يعانون من أمراض القلب أو فقر الدم",
+        "CO_symptoms": "الصداع، الدوخة، الضعف، الغثيان، القيء، ألم في الصدر، الارتباك",
+
+        # HCHO Health Effects
+        "HCHO_effects_short": "تهيج العين والأنف والحلق، دموع العين، السعال، تهيج الجلد. التركيزات العالية يمكن أن تسبب ضائقة تنفسية شديدة.",
+        "HCHO_effects_long": "مصنف كمادة مسرطنة للإنسان (يسبب سرطان البلعوم الأنفي، اللوكيميا). يرتبط التعرض المزمن بالتحسس التنفسي والحساسية.",
+        "HCHO_sensitive": "الأطفال، كبار السن، الأشخاص الذين يعانون من الربو أو الحساسية الكيميائية، العمال في الصناعات التي تستخدم الفورمالديهايد",
+        "HCHO_symptoms": "حرقة العينين، سيلان الأنف، التهاب الحلق، السعال، طفح جلدي، صعوبة التنفس",
+
+        # CH4 Health Effects
+        "CH4_effects_short": "عند التركيزات العالية جداً: الدوخة، الصداع، الغثيان، خطر الاختناق في الأماكن المغلقة. يحل محل الأكسجين.",
+        "CH4_effects_long": "ليس ساماً بشكل مباشر لكنه غاز دفيئة قوي. تسربات الصناعة تشير إلى احتمال التعرض لمركبات خطرة مرتبطة (H2S، المركبات العضوية المتطايرة).",
+        "CH4_sensitive": "العمال في الأماكن الضيقة، الأشخاص القريبون من المنشآت الصناعية أو مدافن النفايات",
+        "CH4_symptoms": "الصداع، الدوخة، الغثيان، التنفس السريع (في بيئات التركيز العالي/الأكسجين المنخفض)",
 
         # Chart and display texts
         "threshold_label": "الحد",
