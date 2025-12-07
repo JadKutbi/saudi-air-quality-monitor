@@ -63,6 +63,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
             # SPI Gauge - scale 0-200 based on threshold percentages
+            # Using Tailwind CSS color palette for consistency
             fig = go.Figure(go.Indicator(
                 mode="gauge",
                 value=max_spi['Index'],
@@ -71,14 +72,14 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                     'axis': {'range': [0, 200], 'tickwidth': 1, 'tickvals': [0, 50, 75, 100, 150, 200]},
                     'bar': {'color': max_spi['Color']},
                     'steps': [
-                        {'range': [0, 50], 'color': "#E8F5E9"},    # Background - dark green bg
-                        {'range': [50, 75], 'color': "#C8E6C9"},   # Normal - light green bg
-                        {'range': [75, 100], 'color': "#FFF9C4"},  # Elevated - yellow bg
-                        {'range': [100, 150], 'color': "#FFE0B2"}, # Violation - orange bg
-                        {'range': [150, 200], 'color': "#FFCDD2"}  # Critical - red bg
+                        {'range': [0, 50], 'color': "#dcfce7"},    # Background - green-100
+                        {'range': [50, 75], 'color': "#bbf7d0"},   # Normal - green-200
+                        {'range': [75, 100], 'color': "#fef08a"},  # Elevated - yellow-200
+                        {'range': [100, 150], 'color': "#fed7aa"}, # Violation - orange-200
+                        {'range': [150, 200], 'color': "#fecaca"}  # Critical - red-200
                     ],
                     'threshold': {
-                        'line': {'color': "red", 'width': 4},
+                        'line': {'color': "#dc2626", 'width': 4},  # red-600
                         'thickness': 0.75,
                         'value': 100  # Violation threshold
                     }
@@ -121,24 +122,25 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             st.markdown(f"**{t('dominant_pollutant')}:** {max_spi['Gas']} ({max_spi['Percentage']}% {t('of_threshold_label')})")
 
             # SPI breakdown by gas - show percentage of threshold
+            # Using Tailwind CSS color palette for consistency
             df_spi = pd.DataFrame(spi_data)
             fig_bar = px.bar(df_spi, x='Gas', y='Percentage', color='CategoryTranslated',
                             color_discrete_map={
-                                t('spi_background'): '#00E400',
-                                t('spi_normal'): '#90EE90',
-                                t('spi_elevated'): '#FFFF00',
-                                t('spi_violation'): '#FF7E00',
-                                t('spi_critical'): '#FF0000',
+                                t('spi_background'): '#22c55e',  # green-500
+                                t('spi_normal'): '#4ade80',      # green-400
+                                t('spi_elevated'): '#eab308',    # yellow-500
+                                t('spi_violation'): '#f97316',   # orange-500
+                                t('spi_critical'): '#ef4444',    # red-500
                                 # Fallback for English categories
-                                'Background': '#00E400',
-                                'Normal': '#90EE90',
-                                'Elevated': '#FFFF00',
-                                'Violation': '#FF7E00',
-                                'Critical': '#FF0000'
+                                'Background': '#22c55e',
+                                'Normal': '#4ade80',
+                                'Elevated': '#eab308',
+                                'Violation': '#f97316',
+                                'Critical': '#ef4444'
                             },
                             title=t('threshold_by_pollutant'))
             # Add 100% reference line
-            fig_bar.add_hline(y=100, line_dash="dash", line_color="red",
+            fig_bar.add_hline(y=100, line_dash="dash", line_color="#dc2626",
                             annotation_text=t('violation_threshold'))
             fig_bar.update_layout(height=220, showlegend=False,
                                 yaxis_title=t('percent_of_threshold'))

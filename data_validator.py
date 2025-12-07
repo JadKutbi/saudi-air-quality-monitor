@@ -69,33 +69,34 @@ class DataValidator:
         percentage = (concentration / violation * 100) if violation > 0 else 0
 
         # Determine category based on threshold levels
+        # Using Tailwind CSS color palette for consistency
         if concentration <= background * 1.5:
             category = "Background"
-            color = "#00E400"  # Green
+            color = "#22c55e"  # green-500
             description = get_text('spi_background_desc', lang)
             health = get_text('spi_health_background', lang)
             index = int(percentage * 0.5)  # Scale to 0-50 range
         elif concentration <= elevated:
             category = "Normal"
-            color = "#90EE90"  # Light green
+            color = "#4ade80"  # green-400
             description = get_text('spi_normal_desc', lang)
             health = get_text('spi_health_normal', lang)
             index = int(25 + (concentration - background * 1.5) / (elevated - background * 1.5) * 25)
         elif concentration <= violation:
             category = "Elevated"
-            color = "#FFFF00"  # Yellow
+            color = "#eab308"  # yellow-500
             description = get_text('spi_elevated_desc', lang)
             health = get_text('spi_health_elevated', lang)
             index = int(50 + (concentration - elevated) / (violation - elevated) * 50)
         elif concentration <= critical:
             category = "Violation"
-            color = "#FF7E00"  # Orange
+            color = "#f97316"  # orange-500
             description = get_text('spi_violation_desc', lang)
             health = get_text('spi_health_violation', lang)
             index = int(100 + (concentration - violation) / (critical - violation) * 50)
         else:
             category = "Critical"
-            color = "#FF0000"  # Red
+            color = "#ef4444"  # red-500
             description = get_text('spi_critical_desc', lang)
             health = get_text('spi_health_critical', lang)
             index = min(200, int(150 + (concentration - critical) / critical * 50))
@@ -382,26 +383,27 @@ class DataValidator:
         overall_risk = total_risk / gas_count if gas_count > 0 else 0
 
         # Determine risk level and recommendations
+        # Using Tailwind CSS color palette for consistency
         lang = get_current_language()
         if overall_risk < 20:
             risk_level = get_text('risk_low', lang)
-            color = "#00E400"
+            color = "#22c55e"  # green-500
             recommendations = [get_text('safe_outdoor', lang), get_text('no_precautions', lang)]
         elif overall_risk < 40:
             risk_level = get_text('risk_moderate', lang)
-            color = "#FFFF00"
+            color = "#eab308"  # yellow-500
             recommendations = [get_text('monitor_symptoms', lang), get_text('limit_exertion', lang)]
         elif overall_risk < 60:
             risk_level = get_text('risk_high', lang)
-            color = "#FF7E00"
+            color = "#f97316"  # orange-500
             recommendations = [get_text('reduce_outdoor', lang), get_text('keep_windows_closed', lang), get_text('use_purifiers', lang)]
         elif overall_risk < 80:
             risk_level = get_text('risk_very_high', lang)
-            color = "#FF0000"
+            color = "#ef4444"  # red-500
             recommendations = [get_text('avoid_outdoor_activities', lang), get_text('seal_indoor', lang), get_text('wear_masks', lang)]
         else:
             risk_level = get_text('risk_severe', lang)
-            color = "#7E0023"
+            color = "#991b1b"  # red-800
             recommendations = [get_text('stay_indoors', lang), get_text('emergency_measures', lang), get_text('follow_advisories', lang)]
 
         return {
