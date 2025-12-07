@@ -35,94 +35,115 @@ class DataValidator:
             'confidence_medium': 50,  # Medium confidence threshold
         }
 
-    def calculate_aqi(self, gas: str, concentration: float) -> Dict:
+    def calculate_satellite_pollution_index(self, gas: str, concentration: float) -> Dict:
         """
-        Calculate Air Quality Index (AQI) based on concentration
-        Using US EPA standards
+        Calculate Satellite Pollution Index (SPI) based on Sentinel-5P thresholds.
+
+        This replaces the EPA AQI calculation which cannot be used with satellite
+        column density data. The SPI is based on percentage of calibrated thresholds
+        for industrial monitoring.
 
         Returns:
-            Dict with AQI value, category, color, and health implications
+            Dict with index value, category, color, and health implications
         """
-        # AQI breakpoints for different gases (simplified)
-        aqi_breakpoints = {
-            'NO2': [
-                (0, 53, 0, 50, "Good", "#00E400", "Air quality is satisfactory"),
-                (54, 100, 51, 100, "Moderate", "#FFFF00", "Acceptable for most"),
-                (101, 360, 101, 150, "Unhealthy for Sensitive", "#FF7E00", "Sensitive groups may experience effects"),
-                (361, 649, 151, 200, "Unhealthy", "#FF0000", "Everyone may experience effects"),
-                (650, 1249, 201, 300, "Very Unhealthy", "#8F3F97", "Health warnings"),
-                (1250, 2049, 301, 500, "Hazardous", "#7E0023", "Emergency conditions")
-            ],
-            'SO2': [
-                (0, 35, 0, 50, "Good", "#00E400", "Air quality is satisfactory"),
-                (36, 75, 51, 100, "Moderate", "#FFFF00", "Acceptable for most"),
-                (76, 185, 101, 150, "Unhealthy for Sensitive", "#FF7E00", "Sensitive groups may experience effects"),
-                (186, 304, 151, 200, "Unhealthy", "#FF0000", "Everyone may experience effects"),
-                (305, 604, 201, 300, "Very Unhealthy", "#8F3F97", "Health warnings"),
-                (605, 1004, 301, 500, "Hazardous", "#7E0023", "Emergency conditions")
-            ],
-            'CO': [
-                (0, 4.4, 0, 50, "Good", "#00E400", "Air quality is satisfactory"),
-                (4.5, 9.4, 51, 100, "Moderate", "#FFFF00", "Acceptable for most"),
-                (9.5, 12.4, 101, 150, "Unhealthy for Sensitive", "#FF7E00", "Sensitive groups may experience effects"),
-                (12.5, 15.4, 151, 200, "Unhealthy", "#FF0000", "Everyone may experience effects"),
-                (15.5, 30.4, 201, 300, "Very Unhealthy", "#8F3F97", "Health warnings"),
-                (30.5, 50.4, 301, 500, "Hazardous", "#7E0023", "Emergency conditions")
-            ],
-            'O3': [
-                (0, 54, 0, 50, "Good", "#00E400", "Air quality is satisfactory"),
-                (55, 70, 51, 100, "Moderate", "#FFFF00", "Acceptable for most"),
-                (71, 85, 101, 150, "Unhealthy for Sensitive", "#FF7E00", "Sensitive groups may experience effects"),
-                (86, 105, 151, 200, "Unhealthy", "#FF0000", "Everyone may experience effects"),
-                (106, 200, 201, 300, "Very Unhealthy", "#8F3F97", "Health warnings"),
-                (201, 400, 301, 500, "Hazardous", "#7E0023", "Emergency conditions")
-            ]
-        }
-
-        # Default AQI if gas not in breakpoints
         lang = get_current_language()
-        if gas not in aqi_breakpoints:
+
+        # Get thresholds from config
+        threshold_info = config.GAS_THRESHOLDS.get(gas, {})
+        background = threshold_info.get('background', 0)
+        elevated = threshold_info.get('elevated_threshold', float('inf'))
+        violation = threshold_info.get('column_threshold', float('inf'))
+        critical = threshold_info.get('critical_threshold', float('inf'))
+
+        if violation == float('inf'):
             return {
-                'aqi': None,
+                'index': None,
+                'percentage': None,
                 'category': get_text('unknown', lang),
                 'color': '#808080',
-                'description': get_text('aqi_not_available', lang),
-                'health_implications': get_text('refer_who', lang)
+                'description': get_text('no_threshold_data', lang),
+                'health_implications': get_text('refer_guidelines', lang)
             }
 
-        # Find appropriate breakpoint
-        for bp in aqi_breakpoints[gas]:
-            c_low, c_high, i_low, i_high, category, color, description = bp
-            if c_low <= concentration <= c_high:
-                # Linear interpolation
-                aqi = ((i_high - i_low) / (c_high - c_low)) * (concentration - c_low) + i_low
-                return {
-                    'aqi': round(aqi),
-                    'category': category,
-                    'color': color,
-                    'description': description,
-                    'health_implications': self._get_health_recommendations(category)
-                }
+        # Calculate percentage of violation threshold
+        percentage = (concentration / violation * 100) if violation > 0 else 0
 
-        # If concentration exceeds all breakpoints
+        # Determine category based on threshold levels
+        if concentration <= background * 1.5:
+            category = "Background"
+            color = "#00E400"  # Green
+            description = get_text('spi_background_desc', lang)
+            health = get_text('spi_health_background', lang)
+            index = int(percentage * 0.5)  # Scale to 0-50 range
+        elif concentration <= elevated:
+            category = "Normal"
+            color = "#90EE90"  # Light green
+            description = get_text('spi_normal_desc', lang)
+            health = get_text('spi_health_normal', lang)
+            index = int(25 + (concentration - background * 1.5) / (elevated - background * 1.5) * 25)
+        elif concentration <= violation:
+            category = "Elevated"
+            color = "#FFFF00"  # Yellow
+            description = get_text('spi_elevated_desc', lang)
+            health = get_text('spi_health_elevated', lang)
+            index = int(50 + (concentration - elevated) / (violation - elevated) * 50)
+        elif concentration <= critical:
+            category = "Violation"
+            color = "#FF7E00"  # Orange
+            description = get_text('spi_violation_desc', lang)
+            health = get_text('spi_health_violation', lang)
+            index = int(100 + (concentration - violation) / (critical - violation) * 50)
+        else:
+            category = "Critical"
+            color = "#FF0000"  # Red
+            description = get_text('spi_critical_desc', lang)
+            health = get_text('spi_health_critical', lang)
+            index = min(200, int(150 + (concentration - critical) / critical * 50))
+
         return {
-            'aqi': 500,
-            'category': get_text('aqi_hazardous', lang),
-            'color': '#7E0023',
-            'description': get_text('emergency_conditions', lang),
-            'health_implications': get_text('avoid_outdoor', lang)
+            'index': index,
+            'percentage': round(percentage, 1),
+            'category': category,
+            'color': color,
+            'description': description,
+            'health_implications': health
+        }
+
+    def calculate_aqi(self, gas: str, concentration: float) -> Dict:
+        """
+        Wrapper for backwards compatibility - redirects to satellite pollution index.
+
+        Note: Traditional EPA AQI cannot be calculated from Sentinel-5P satellite
+        column density data (mmol/m²). This method now returns a satellite-based
+        pollution index instead.
+        """
+        result = self.calculate_satellite_pollution_index(gas, concentration)
+        # Map to AQI-like response for compatibility
+        return {
+            'aqi': result['index'],
+            'category': result['category'],
+            'color': result['color'],
+            'description': result['description'],
+            'health_implications': result['health_implications'],
+            'percentage_of_threshold': result['percentage']
         }
 
     def _get_health_recommendations(self, category: str) -> str:
-        """Get health recommendations based on AQI category"""
+        """Get health recommendations based on pollution category"""
         lang = get_current_language()
         recommendations = {
-            "Good": get_text('health_good', lang),
-            "Moderate": get_text('health_moderate', lang),
-            "Unhealthy for Sensitive": get_text('health_sensitive', lang),
-            "Unhealthy": get_text('health_unhealthy', lang),
-            "Very Unhealthy": get_text('health_very_unhealthy', lang),
-            "Hazardous": get_text('health_hazardous', lang)
+            "Background": get_text('spi_health_background', lang),
+            "Normal": get_text('spi_health_normal', lang),
+            "Elevated": get_text('spi_health_elevated', lang),
+            "Violation": get_text('spi_health_violation', lang),
+            "Critical": get_text('spi_health_critical', lang),
+            # Legacy AQI categories for any remaining references
+            "Good": get_text('spi_health_background', lang),
+            "Moderate": get_text('spi_health_normal', lang),
+            "Unhealthy for Sensitive": get_text('spi_health_elevated', lang),
+            "Unhealthy": get_text('spi_health_violation', lang),
+            "Very Unhealthy": get_text('spi_health_violation', lang),
+            "Hazardous": get_text('spi_health_critical', lang)
         }
         return recommendations.get(category, get_text('follow_advisories', lang))
 

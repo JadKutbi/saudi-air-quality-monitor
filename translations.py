@@ -30,6 +30,7 @@ TRANSLATIONS = {
         # Tabs
         "tab_overview": "Overview",
         "tab_aqi": "AQI Dashboard",
+        "tab_spi": "Pollution Index",
         "tab_map": "Map View",
         "tab_analysis": "Analysis",
         "tab_violations": "Violations",
@@ -114,7 +115,7 @@ TRANSLATIONS = {
         "cloud_storage": "Google Cloud Firestore - Persistent cloud storage enabled!",
         "local_storage": "Local Storage - Records may be lost on app restart",
 
-        # AQI
+        # AQI (legacy keys kept for compatibility)
         "aqi_dashboard": "Air Quality Index (AQI) Dashboard",
         "air_quality_status": "Air Quality Status",
         "dominant_pollutant": "Dominant Pollutant",
@@ -125,6 +126,52 @@ TRANSLATIONS = {
         "aqi_unhealthy": "Unhealthy",
         "aqi_very_unhealthy": "Very Unhealthy",
         "aqi_hazardous": "Hazardous",
+
+        # Satellite Pollution Index (SPI) - New accurate metric for satellite data
+        "spi_dashboard": "Satellite Pollution Index",
+        "about_spi": "About This Index",
+        "spi_explanation": """**Why Satellite Pollution Index instead of AQI?**
+
+Traditional Air Quality Index (AQI) is designed for ground-level monitoring stations that measure air at breathing height in ppb/ppm units.
+
+Sentinel-5P satellite data measures **total column density** (mmol/m²) - the total amount of a gas in the entire atmospheric column from ground to space. These values cannot be directly converted to ground-level AQI.
+
+**This Satellite Pollution Index shows:**
+- Percentage of calibrated thresholds for industrial monitoring
+- Categories based on Sentinel-5P typical ranges
+- Health guidance appropriate for satellite-detected pollution events""",
+        "pollution_status": "Pollution Status",
+        "worst_pollutant": "Highest Pollutant",
+        "threshold_by_pollutant": "% of Threshold by Pollutant",
+        "violation_threshold": "Violation (100%)",
+        "percent_of_threshold": "% of Threshold",
+        "measured_values": "Measured Values",
+        "no_data_for_index": "No pollution data available for index calculation",
+
+        # SPI Categories
+        "spi_background": "Background",
+        "spi_normal": "Normal",
+        "spi_elevated": "Elevated",
+        "spi_violation": "Violation",
+        "spi_critical": "Critical",
+
+        # SPI Descriptions
+        "spi_background_desc": "Near background atmospheric levels",
+        "spi_normal_desc": "Within normal range for the region",
+        "spi_elevated_desc": "Above normal but below violation threshold",
+        "spi_violation_desc": "Exceeds threshold - pollution event detected",
+        "spi_critical_desc": "Severe pollution event - significantly above threshold",
+
+        # SPI Health Recommendations
+        "spi_health_background": "Air quality is at natural background levels. Safe for all outdoor activities.",
+        "spi_health_normal": "Air quality is normal for an industrial region. No special precautions needed.",
+        "spi_health_elevated": "Elevated pollutant levels detected. Sensitive individuals should monitor conditions.",
+        "spi_health_violation": "Pollution event detected. Consider limiting prolonged outdoor exposure. Industrial monitoring recommended.",
+        "spi_health_critical": "Severe pollution event. Avoid unnecessary outdoor exposure. Follow local health advisories.",
+
+        # Additional SPI keys
+        "no_threshold_data": "No threshold data available for this gas",
+        "refer_guidelines": "Refer to local environmental guidelines",
 
         # Data quality
         "data_quality": "Data Quality Indicators",
@@ -394,6 +441,7 @@ TRANSLATIONS = {
         # Tabs
         "tab_overview": "نظرة عامة",
         "tab_aqi": "مؤشر جودة الهواء",
+        "tab_spi": "مؤشر التلوث",
         "tab_map": "الخريطة",
         "tab_analysis": "التحليل",
         "tab_violations": "المخالفات",
@@ -478,7 +526,7 @@ TRANSLATIONS = {
         "cloud_storage": "Google Cloud Firestore - التخزين السحابي الدائم مفعّل!",
         "local_storage": "التخزين المحلي - قد تُفقد السجلات عند إعادة تشغيل التطبيق",
 
-        # AQI
+        # AQI (legacy keys kept for compatibility)
         "aqi_dashboard": "لوحة مؤشر جودة الهواء (AQI)",
         "air_quality_status": "حالة جودة الهواء",
         "dominant_pollutant": "الملوث الرئيسي",
@@ -489,6 +537,52 @@ TRANSLATIONS = {
         "aqi_unhealthy": "غير صحي",
         "aqi_very_unhealthy": "غير صحي جداً",
         "aqi_hazardous": "خطر",
+
+        # Satellite Pollution Index (SPI) - مؤشر تلوث القمر الصناعي
+        "spi_dashboard": "مؤشر التلوث الفضائي",
+        "about_spi": "حول هذا المؤشر",
+        "spi_explanation": """**لماذا مؤشر التلوث الفضائي بدلاً من مؤشر جودة الهواء؟**
+
+مؤشر جودة الهواء التقليدي (AQI) مصمم لمحطات المراقبة الأرضية التي تقيس الهواء على مستوى التنفس بوحدات ppb/ppm.
+
+بيانات القمر الصناعي Sentinel-5P تقيس **الكثافة العمودية الإجمالية** (mmol/m²) - الكمية الإجمالية للغاز في العمود الجوي بأكمله من الأرض إلى الفضاء. لا يمكن تحويل هذه القيم مباشرة إلى مؤشر جودة الهواء الأرضي.
+
+**يُظهر مؤشر التلوث الفضائي:**
+- نسبة مئوية من الحدود المعايرة للمراقبة الصناعية
+- فئات بناءً على النطاقات النموذجية لـ Sentinel-5P
+- إرشادات صحية مناسبة لأحداث التلوث المكتشفة بالأقمار الصناعية""",
+        "pollution_status": "حالة التلوث",
+        "worst_pollutant": "أعلى ملوث",
+        "threshold_by_pollutant": "% من الحد حسب الملوث",
+        "violation_threshold": "مخالفة (100%)",
+        "percent_of_threshold": "% من الحد",
+        "measured_values": "القيم المقاسة",
+        "no_data_for_index": "لا توجد بيانات تلوث متاحة لحساب المؤشر",
+
+        # SPI Categories
+        "spi_background": "الخلفية",
+        "spi_normal": "طبيعي",
+        "spi_elevated": "مرتفع",
+        "spi_violation": "مخالفة",
+        "spi_critical": "حرج",
+
+        # SPI Descriptions
+        "spi_background_desc": "قريب من مستويات الغلاف الجوي الطبيعية",
+        "spi_normal_desc": "ضمن النطاق الطبيعي للمنطقة",
+        "spi_elevated_desc": "أعلى من الطبيعي ولكن أقل من حد المخالفة",
+        "spi_violation_desc": "يتجاوز الحد - تم اكتشاف حدث تلوث",
+        "spi_critical_desc": "حدث تلوث شديد - أعلى بكثير من الحد",
+
+        # SPI Health Recommendations
+        "spi_health_background": "جودة الهواء في مستويات الخلفية الطبيعية. آمن لجميع الأنشطة الخارجية.",
+        "spi_health_normal": "جودة الهواء طبيعية للمنطقة الصناعية. لا حاجة لاحتياطات خاصة.",
+        "spi_health_elevated": "تم اكتشاف مستويات ملوثات مرتفعة. يجب على الأفراد الحساسين مراقبة الظروف.",
+        "spi_health_violation": "تم اكتشاف حدث تلوث. فكر في الحد من التعرض الخارجي لفترات طويلة. يُوصى بالمراقبة الصناعية.",
+        "spi_health_critical": "حدث تلوث شديد. تجنب التعرض الخارجي غير الضروري. اتبع الإرشادات الصحية المحلية.",
+
+        # Additional SPI keys
+        "no_threshold_data": "لا توجد بيانات حد متاحة لهذا الغاز",
+        "refer_guidelines": "راجع الإرشادات البيئية المحلية",
 
         # Data quality
         "data_quality": "مؤشرات جودة البيانات",

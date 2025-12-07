@@ -112,8 +112,10 @@ def inject_custom_css():
 # Initialize session state
 if 'selected_city' not in st.session_state:
     st.session_state.selected_city = 'Yanbu'
-if 'auto_refresh' not in st.session_state:
-    st.session_state.auto_refresh = False
+# Version flag to reset auto_refresh default (bump version to force reset)
+if st.session_state.get('app_version') != 'v2':
+    st.session_state.app_version = 'v2'
+    st.session_state.auto_refresh = True  # New default: enabled
 if 'refresh_interval' not in st.session_state:
     st.session_state.refresh_interval = 6
 if 'last_update' not in st.session_state:
@@ -262,7 +264,7 @@ def create_sidebar():
 
         refresh_enabled = st.toggle(
             t('auto_refresh'),
-            value=st.session_state.get('auto_refresh', False),
+            value=st.session_state.get('auto_refresh', True),
         )
         st.session_state.auto_refresh = refresh_enabled
 
@@ -1308,22 +1310,30 @@ def main():
     # Main content with translated tabs
     tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
         f"📊 {t('tab_overview')}",
-        f"🌡️ {t('tab_aqi')}",
+        f"📈 {t('tab_spi')}",
         f"🗺️ {t('tab_map')}",
-        f"📈 {t('tab_analysis')}",
+        f"📊 {t('tab_analysis')}",
         f"⚠️ {t('tab_violations')}",
         f"💡 {t('tab_insights')}",
         f"📜 {t('tab_history')}"
     ])
 
-    # Fetch data
+    # Fetch data - selected city first for fast display, then others on demand
     if not st.session_state.pollution_data:
-        with st.spinner(t('fetching_data')):
-            st.session_state.pollution_data = fetch_pollution_data(city, days_back)
+        st.session_state.pollution_data = {}
+
+    # Fetch selected city if not cached
+    if city not in st.session_state.pollution_data:
+        with st.spinner(f"{t('fetching_data')} - {t(city)}..."):
+            st.session_state.pollution_data[city] = fetch_pollution_data(city, days_back)
             ksa_tz = pytz.timezone(config.TIMEZONE)
             st.session_state.last_update = datetime.now(ksa_tz).strftime("%Y-%m-%d %H:%M:%S KSA")
 
-    pollution_data = st.session_state.pollution_data
+    # Fetch remaining cities in background (after main content loads)
+    other_cities = [c for c in config.CITIES.keys() if c not in st.session_state.pollution_data]
+
+    # Get data for selected city
+    pollution_data = st.session_state.pollution_data.get(city, {})
 
     # Check if we have any data
     if not pollution_data:
@@ -1368,11 +1378,11 @@ def main():
                 st.metric(t('data_quality_label'), t('no_data_label'))
 
     with tab2:
-        st.header(f"🌡️ {t('aqi_dashboard_header')}")
+        st.header(f"📈 {t('spi_dashboard')}")
         # Initialize validator
         _, _, _, validator, _ = initialize_services()
 
-        # AQI Dashboard
+        # Satellite Pollution Index Dashboard
         create_aqi_dashboard(pollution_data, validator)
         st.divider()
 
@@ -1428,6 +1438,12 @@ def main():
         ksa_tz = pytz.timezone(config.TIMEZONE)
         current_time = datetime.now(ksa_tz)
         st.caption(f"**{t('system_time')}:** {current_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+
+    # Pre-fetch other cities after main content is displayed
+    if other_cities:
+        with st.spinner(f"{t('fetching_data')} - {', '.join([t(c) for c in other_cities])}..."):
+            for other_city in other_cities:
+                st.session_state.pollution_data[other_city] = fetch_pollution_data(other_city, days_back)
 
 if __name__ == "__main__":
     main()

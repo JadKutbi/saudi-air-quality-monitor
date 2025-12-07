@@ -18,79 +18,92 @@ def t(key: str) -> str:
     return get_text(key, st.session_state.get('language', 'en'))
 
 
-def get_aqi_category_translated(category: str) -> str:
-    """Translate AQI category name"""
+def get_spi_category_translated(category: str) -> str:
+    """Translate Satellite Pollution Index category name"""
     category_map = {
-        'Good': 'aqi_good',
-        'Moderate': 'aqi_moderate',
-        'Unhealthy for Sensitive': 'aqi_unhealthy_sensitive',
-        'Unhealthy': 'aqi_unhealthy',
-        'Very Unhealthy': 'aqi_very_unhealthy',
-        'Hazardous': 'aqi_hazardous'
+        'Background': 'spi_background',
+        'Normal': 'spi_normal',
+        'Elevated': 'spi_elevated',
+        'Violation': 'spi_violation',
+        'Critical': 'spi_critical'
     }
     key = category_map.get(category, 'unknown')
     return t(key)
 
 
 def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
-    """Create comprehensive AQI dashboard"""
-    st.subheader(f"🌡️ {t('aqi_dashboard')}")
+    """Create Satellite Pollution Index (SPI) dashboard based on Sentinel-5P thresholds"""
+    st.subheader(f"📊 {t('spi_dashboard')}")
 
-    # Calculate AQI for all gases
-    aqi_data = []
+    # Info box explaining the metric
+    with st.expander(f"ℹ️ {t('about_spi')}", expanded=False):
+        st.markdown(t('spi_explanation'))
+
+    # Calculate SPI for all gases
+    spi_data = []
     for gas, data in pollution_data.items():
         if data.get('success'):
-            aqi_info = validator.calculate_aqi(gas, data['statistics']['max'])
-            if aqi_info['aqi']:
-                aqi_data.append({
+            spi_info = validator.calculate_satellite_pollution_index(gas, data['statistics']['max'])
+            if spi_info['index'] is not None:
+                spi_data.append({
                     'Gas': gas,
-                    'AQI': aqi_info['aqi'],
-                    'Category': aqi_info['category'],
-                    'CategoryTranslated': get_aqi_category_translated(aqi_info['category']),
-                    'Color': aqi_info['color']
+                    'Index': spi_info['index'],
+                    'Percentage': spi_info['percentage'],
+                    'Category': spi_info['category'],
+                    'CategoryTranslated': get_spi_category_translated(spi_info['category']),
+                    'Color': spi_info['color'],
+                    'Value': data['statistics']['max'],
+                    'Unit': data['unit']
                 })
 
-    if aqi_data:
-        # Display overall AQI (worst case)
-        max_aqi = max(aqi_data, key=lambda x: x['AQI'])
+    if spi_data:
+        # Display overall SPI (worst case)
+        max_spi = max(spi_data, key=lambda x: x['Index'])
 
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
-            # AQI Gauge - use gauge only mode and add number as centered annotation
+            # SPI Gauge - scale 0-200 based on threshold percentages
             fig = go.Figure(go.Indicator(
                 mode="gauge",
-                value=max_aqi['AQI'],
+                value=max_spi['Index'],
                 domain={'x': [0, 1], 'y': [0.15, 1]},
                 gauge={
-                    'axis': {'range': [None, 500], 'tickwidth': 1},
-                    'bar': {'color': max_aqi['Color']},
+                    'axis': {'range': [0, 200], 'tickwidth': 1, 'tickvals': [0, 50, 75, 100, 150, 200]},
+                    'bar': {'color': max_spi['Color']},
                     'steps': [
-                        {'range': [0, 50], 'color': "#E8F5E9"},
-                        {'range': [50, 100], 'color': "#FFF9C4"},
-                        {'range': [100, 150], 'color': "#FFE0B2"},
-                        {'range': [150, 200], 'color': "#FFCCBC"},
-                        {'range': [200, 300], 'color': "#E1BEE7"},
-                        {'range': [300, 500], 'color': "#FFCDD2"}
+                        {'range': [0, 50], 'color': "#E8F5E9"},    # Background - dark green bg
+                        {'range': [50, 75], 'color': "#C8E6C9"},   # Normal - light green bg
+                        {'range': [75, 100], 'color': "#FFF9C4"},  # Elevated - yellow bg
+                        {'range': [100, 150], 'color': "#FFE0B2"}, # Violation - orange bg
+                        {'range': [150, 200], 'color': "#FFCDD2"}  # Critical - red bg
                     ],
                     'threshold': {
                         'line': {'color': "red", 'width': 4},
                         'thickness': 0.75,
-                        'value': 150
+                        'value': 100  # Violation threshold
                     }
                 }
             ))
-            # Add centered number and title as annotations to avoid RTL issues
+            # Add centered number and title as annotations
             fig.add_annotation(
                 x=0.5, y=0.35,
-                text=f"<b>{int(max_aqi['AQI'])}</b>",
-                font=dict(size=56, color="#333"),
+                text=f"<b>{int(max_spi['Percentage'])}%</b>",
+                font=dict(size=48, color="#333"),
+                showarrow=False,
+                xanchor='center',
+                yanchor='middle'
+            )
+            fig.add_annotation(
+                x=0.5, y=0.15,
+                text=t('of_threshold'),
+                font=dict(size=14, color="#666"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='middle'
             )
             fig.add_annotation(
                 x=0.5, y=0.95,
-                text=t('overall_aqi'),
+                text=t('worst_pollutant'),
                 font=dict(size=16, color="#333"),
                 showarrow=False,
                 xanchor='center',
@@ -104,37 +117,49 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
         with col2:
-            st.metric(t('air_quality_status'), max_aqi['CategoryTranslated'])
-            st.markdown(f"**{t('dominant_pollutant')}:** {max_aqi['Gas']}")
+            st.metric(t('pollution_status'), max_spi['CategoryTranslated'])
+            st.markdown(f"**{t('dominant_pollutant')}:** {max_spi['Gas']} ({max_spi['Percentage']}% {t('of_threshold_label')})")
 
-            # AQI breakdown by gas
-            df_aqi = pd.DataFrame(aqi_data)
-            fig_bar = px.bar(df_aqi, x='Gas', y='AQI', color='CategoryTranslated',
+            # SPI breakdown by gas - show percentage of threshold
+            df_spi = pd.DataFrame(spi_data)
+            fig_bar = px.bar(df_spi, x='Gas', y='Percentage', color='CategoryTranslated',
                             color_discrete_map={
-                                t('aqi_good'): '#00E400',
-                                t('aqi_moderate'): '#FFFF00',
-                                t('aqi_unhealthy_sensitive'): '#FF7E00',
-                                t('aqi_unhealthy'): '#FF0000',
-                                t('aqi_very_unhealthy'): '#8F3F97',
-                                t('aqi_hazardous'): '#7E0023',
+                                t('spi_background'): '#00E400',
+                                t('spi_normal'): '#90EE90',
+                                t('spi_elevated'): '#FFFF00',
+                                t('spi_violation'): '#FF7E00',
+                                t('spi_critical'): '#FF0000',
                                 # Fallback for English categories
-                                'Good': '#00E400',
-                                'Moderate': '#FFFF00',
-                                'Unhealthy for Sensitive': '#FF7E00',
-                                'Unhealthy': '#FF0000',
-                                'Very Unhealthy': '#8F3F97',
-                                'Hazardous': '#7E0023'
+                                'Background': '#00E400',
+                                'Normal': '#90EE90',
+                                'Elevated': '#FFFF00',
+                                'Violation': '#FF7E00',
+                                'Critical': '#FF0000'
                             },
-                            title=t('aqi_by_pollutant'))
-            fig_bar.update_layout(height=200, showlegend=False)
+                            title=t('threshold_by_pollutant'))
+            # Add 100% reference line
+            fig_bar.add_hline(y=100, line_dash="dash", line_color="red",
+                            annotation_text=t('violation_threshold'))
+            fig_bar.update_layout(height=220, showlegend=False,
+                                yaxis_title=t('percent_of_threshold'))
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col3:
             # Health recommendations
             st.info(f"**{t('health_advice')}:**")
-            aqi_info = validator.calculate_aqi(max_aqi['Gas'],
-                                              pollution_data[max_aqi['Gas']]['statistics']['max'])
-            st.write(aqi_info['health_implications'])
+            spi_info = validator.calculate_satellite_pollution_index(
+                max_spi['Gas'],
+                pollution_data[max_spi['Gas']]['statistics']['max']
+            )
+            st.write(spi_info['health_implications'])
+
+            # Show actual values
+            st.markdown(f"**{t('measured_values')}:**")
+            for item in sorted(spi_data, key=lambda x: x['Percentage'], reverse=True)[:3]:
+                status_icon = "🔴" if item['Percentage'] >= 100 else "🟡" if item['Percentage'] >= 75 else "🟢"
+                st.caption(f"{status_icon} {item['Gas']}: {item['Value']:.2f} {item['Unit']}")
+    else:
+        st.warning(t('no_data_for_index'))
 
 def create_health_risk_panel(pollution_data: Dict, validator) -> None:
     """Create health risk assessment panel"""
