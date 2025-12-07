@@ -182,36 +182,39 @@ def create_gas_health_effects_panel(pollution_data: Dict, validator) -> None:
                     'unit': data['unit']
                 })
 
-    # Sort by severity (percentage of threshold)
-    gas_status.sort(key=lambda x: x['percentage'], reverse=True)
+    # Filter only elevated gases (>= 75% of threshold)
+    elevated_gases = [g for g in gas_status if g['percentage'] >= 75]
 
-    if not gas_status:
-        st.info(t('no_data_available'))
+    # Sort by severity (percentage of threshold)
+    elevated_gases.sort(key=lambda x: x['percentage'], reverse=True)
+
+    if not elevated_gases:
+        st.success(f"✅ {t('no_violations')} - {t('spi_health_normal')}")
         return
 
-    # Display health effects for each gas
-    for item in gas_status:
+    # Display health effects for elevated gases only
+    for item in elevated_gases:
         gas = item['gas']
         pct = item['percentage']
 
-        # Determine severity styling
-        if pct >= 100:
+        # Determine severity styling (only elevated gases shown, so >= 75%)
+        if pct >= 150:
             severity_color = "#dc2626"  # Red
             severity_bg = "#fee2e2"
             severity_icon = "🔴"
-            severity_text = t('critical') if pct >= 150 else t('violation')
-        elif pct >= 75:
+            severity_text = t('critical')
+        elif pct >= 100:
+            severity_color = "#ea580c"  # Dark orange
+            severity_bg = "#ffedd5"
+            severity_icon = "🟠"
+            severity_text = t('violation')
+        else:  # 75-99%
             severity_color = "#f59e0b"  # Orange
             severity_bg = "#fef3c7"
             severity_icon = "🟡"
             severity_text = t('spi_elevated')
-        else:
-            severity_color = "#10b981"  # Green
-            severity_bg = "#d1fae5"
-            severity_icon = "🟢"
-            severity_text = t('normal')
 
-        with st.expander(f"{severity_icon} **{gas}** - {config.GAS_PRODUCTS[gas]['name']} ({pct:.0f}% {t('of_threshold_label')})", expanded=(pct >= 75)):
+        with st.expander(f"{severity_icon} **{gas}** - {config.GAS_PRODUCTS[gas]['name']} ({pct:.0f}% {t('of_threshold_label')})", expanded=True):
             # Current level indicator
             st.markdown(f"""
             <div style="background-color: {severity_bg}; border-left: 4px solid {severity_color}; padding: 10px; margin-bottom: 15px; border-radius: 5px;">
