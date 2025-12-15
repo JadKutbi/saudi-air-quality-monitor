@@ -284,19 +284,72 @@ def inject_custom_css():
         }}
 
         [data-testid="stSidebar"] [data-testid="stMarkdown"] {{
-            color: rgba(255,255,255,0.9);
+            color: #ffffff;
         }}
 
-        [data-testid="stSidebar"] .stSelectbox label {{
-            color: rgba(255,255,255,0.9);
+        [data-testid="stSidebar"] .stSelectbox label,
+        [data-testid="stSidebar"] .stSlider label,
+        [data-testid="stSidebar"] .stCheckbox label {{
+            color: #ffffff !important;
         }}
 
         [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{
-            color: white;
+            color: #ffffff;
         }}
 
-        /* Divider styling */
-        hr {{
+        /* Sidebar caption text */
+        [data-testid="stSidebar"] .stCaption,
+        [data-testid="stSidebar"] small,
+        [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
+            color: rgba(255,255,255,0.85) !important;
+        }}
+
+        /* Sidebar info/alert boxes */
+        [data-testid="stSidebar"] [data-testid="stAlert"] {{
+            background-color: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: #ffffff;
+        }}
+
+        /* Sidebar selectbox dropdown */
+        [data-testid="stSidebar"] [data-baseweb="select"] {{
+            background-color: rgba(255,255,255,0.1);
+        }}
+
+        [data-testid="stSidebar"] [data-baseweb="select"] > div {{
+            background-color: rgba(255,255,255,0.1);
+            border-color: rgba(255,255,255,0.3);
+            color: #ffffff;
+        }}
+
+        /* Sidebar slider */
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {{
+            background-color: rgba(255,255,255,0.2);
+        }}
+
+        /* Sidebar toggle */
+        [data-testid="stSidebar"] [data-testid="stCheckbox"] span {{
+            color: #ffffff;
+        }}
+
+        /* Sidebar expander */
+        [data-testid="stSidebar"] [data-testid="stExpander"] {{
+            background-color: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 8px;
+        }}
+
+        [data-testid="stSidebar"] [data-testid="stExpander"] summary {{
+            color: #ffffff;
+        }}
+
+        /* Sidebar divider - visible on dark bg */
+        [data-testid="stSidebar"] hr {{
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent) !important;
+        }}
+
+        /* Main content divider styling */
+        .main hr {{
             border: none;
             height: 1px;
             background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
