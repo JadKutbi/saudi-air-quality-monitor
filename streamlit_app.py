@@ -322,7 +322,7 @@ def inject_custom_css():
             color: #ffffff;
         }}
 
-        /* Sidebar slider */
+        /* Sidebar slider track */
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {{
             background-color: rgba(255,255,255,0.2);
         }}
@@ -334,11 +334,31 @@ def inject_custom_css():
             color: #ffffff !important;
         }}
 
-        /* Slider thumb value display */
-        [data-testid="stSidebar"] [data-testid="stThumbValue"] {{
+        /* Slider thumb (the draggable circle) */
+        [data-testid="stSidebar"] .stSlider [role="slider"],
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {{
+            background-color: var(--rcjy-orange) !important;
+            border-color: var(--rcjy-orange) !important;
+        }}
+
+        /* Slider thumb value display box */
+        [data-testid="stSidebar"] [data-testid="stThumbValue"],
+        [data-testid="stSidebar"] .stSlider [data-testid="stThumbValue"] {{
             color: #ffffff !important;
             background-color: var(--rcjy-orange) !important;
+            border: none !important;
             font-weight: 600;
+            border-radius: 6px;
+        }}
+
+        /* Remove grey box - slider inner track */
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div {{
+            background-color: transparent !important;
+        }}
+
+        /* Slider filled portion (progress) */
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div {{
+            background-color: var(--rcjy-orange) !important;
         }}
 
         /* Sidebar toggle */
