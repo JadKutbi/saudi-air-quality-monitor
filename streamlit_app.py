@@ -327,6 +327,20 @@ def inject_custom_css():
             background-color: rgba(255,255,255,0.2);
         }}
 
+        /* Sidebar slider value text (30 minutes, 24 hours, etc.) */
+        [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMin"],
+        [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMax"],
+        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] div {{
+            color: #ffffff !important;
+        }}
+
+        /* Slider thumb value display */
+        [data-testid="stSidebar"] [data-testid="stThumbValue"] {{
+            color: #ffffff !important;
+            background-color: var(--rcjy-orange) !important;
+            font-weight: 600;
+        }}
+
         /* Sidebar toggle */
         [data-testid="stSidebar"] [data-testid="stCheckbox"] span {{
             color: #ffffff;
@@ -555,10 +569,12 @@ def create_header():
 def create_sidebar():
     """Configure sidebar with city selection, language toggle, and refresh controls."""
     with st.sidebar:
-        # RCJY Logo in sidebar
+        # RCJY Logo in sidebar with light background for visibility
         st.markdown(f"""
-        <div style="text-align: center; padding: 1rem 0 1.5rem 0;">
-            <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 60px; width: auto; filter: brightness(1.1);">
+        <div style="text-align: center; padding: 1rem; margin-bottom: 1rem;">
+            <div style="background: white; border-radius: 12px; padding: 0.75rem 1rem; display: inline-block; box-shadow: 0 2px 8px rgba(0,0,0,0.15);">
+                <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 55px; width: auto;">
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
