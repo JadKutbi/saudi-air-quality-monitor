@@ -68,11 +68,11 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             if pct >= 150:
                 gauge_color = "#dc2626"  # Critical red
             elif pct >= 100:
-                gauge_color = "#E67E22"  # RCJY orange
+                gauge_color = "#D97706"  # Amber (violation)
             elif pct >= 75:
-                gauge_color = "#F39C12"  # RCJY gold
+                gauge_color = "#F59E0B"  # Amber light (elevated)
             else:
-                gauge_color = "#27ae60"  # RCJY green
+                gauge_color = "#059669"  # Emerald green (safe)
 
             fig = go.Figure(go.Indicator(
                 mode="gauge",
@@ -83,8 +83,8 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                         'range': [0, 200],
                         'tickwidth': 2,
                         'tickvals': [0, 50, 75, 100, 150, 200],
-                        'tickcolor': "#1a1a2e",
-                        'tickfont': {'size': 11, 'color': '#64748b'}
+                        'tickcolor': "#1E3A5F",
+                        'tickfont': {'size': 11, 'color': '#64748B'}
                     },
                     'bar': {'color': gauge_color, 'thickness': 0.85},
                     'bgcolor': '#f1f5f9',
@@ -108,7 +108,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             fig.add_annotation(
                 x=0.5, y=0.38,
                 text=f"<b>{int(max_spi['Percentage'])}%</b>",
-                font=dict(size=52, color="#1a1a2e", family="Inter, sans-serif"),
+                font=dict(size=52, color="#1E3A5F", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='middle'
@@ -116,7 +116,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             fig.add_annotation(
                 x=0.5, y=0.18,
                 text=t('of_threshold'),
-                font=dict(size=13, color="#64748b", family="Inter, sans-serif"),
+                font=dict(size=13, color="#64748B", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='middle'
@@ -124,7 +124,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             fig.add_annotation(
                 x=0.5, y=0.97,
                 text=f"<b>{t('worst_pollutant')}</b>",
-                font=dict(size=14, color="#1a1a2e", family="Inter, sans-serif"),
+                font=dict(size=14, color="#1E3A5F", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='top'
@@ -149,7 +149,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                         margin-bottom: 1rem;">
                 <p style="margin: 0; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">{t('pollution_status')}</p>
                 <p style="margin: 0.25rem 0 0 0; font-size: 1.5rem; font-weight: 700; color: {status_color};">{max_spi['CategoryTranslated']}</p>
-                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; color: #1a1a2e;"><strong>{t('dominant_pollutant')}:</strong> {max_spi['Gas']} ({max_spi['Percentage']:.0f}% {t('of_threshold_label')})</p>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; color: #1E3A5F;"><strong>{t('dominant_pollutant')}:</strong> {max_spi['Gas']} ({max_spi['Percentage']:.0f}% {t('of_threshold_label')})</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -157,16 +157,16 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             df_spi = pd.DataFrame(spi_data)
             fig_bar = px.bar(df_spi, x='Gas', y='Percentage', color='CategoryTranslated',
                             color_discrete_map={
-                                t('spi_background'): '#27ae60',  # RCJY green
-                                t('spi_normal'): '#2ecc71',      # Light green
-                                t('spi_elevated'): '#F39C12',    # RCJY gold
-                                t('spi_violation'): '#E67E22',   # RCJY orange
+                                t('spi_background'): '#059669',  # Emerald green
+                                t('spi_normal'): '#10B981',      # Light emerald
+                                t('spi_elevated'): '#F59E0B',    # Amber light
+                                t('spi_violation'): '#D97706',   # Amber
                                 t('spi_critical'): '#dc2626',    # Critical red
                                 # Fallback for English categories
-                                'Background': '#27ae60',
-                                'Normal': '#2ecc71',
-                                'Elevated': '#F39C12',
-                                'Violation': '#E67E22',
+                                'Background': '#059669',
+                                'Normal': '#10B981',
+                                'Elevated': '#F59E0B',
+                                'Violation': '#D97706',
                                 'Critical': '#dc2626'
                             },
                             title=f"<b>{t('threshold_by_pollutant')}</b>")
@@ -181,13 +181,13 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
                 paper_bgcolor='rgba(0,0,0,0)',
                 plot_bgcolor='rgba(0,0,0,0)',
                 font=dict(family="Inter, sans-serif"),
-                title_font=dict(size=14, color="#1a1a2e"),
+                title_font=dict(size=14, color="#1E3A5F"),
                 xaxis=dict(
-                    tickfont=dict(size=12, color="#1a1a2e"),
+                    tickfont=dict(size=12, color="#1E3A5F"),
                     gridcolor='rgba(0,0,0,0)'
                 ),
                 yaxis=dict(
-                    tickfont=dict(size=11, color="#64748b"),
+                    tickfont=dict(size=11, color="#64748B"),
                     gridcolor='#e2e8f0'
                 )
             )
@@ -212,15 +212,15 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             elif max_spi['Percentage'] >= 75:
                 advice_icon = "💡"
                 advice_bg = "#fef3c7"
-                advice_border = "#F39C12"
+                advice_border = "#F59E0B"
             else:
                 advice_icon = "✅"
                 advice_bg = "#d1fae5"
-                advice_border = "#27ae60"
+                advice_border = "#059669"
 
             st.markdown(f"""
             <div style="background: {advice_bg}; border-radius: 12px; padding: 1rem; border: 1px solid {advice_border}20;">
-                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1a1a2e;">{advice_icon} {t('health_advice')}</p>
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1E3A5F;">{advice_icon} {t('health_advice')}</p>
                 <p style="margin: 0; font-size: 0.9rem; color: #374151; line-height: 1.5;">{spi_info['health_implications']}</p>
             </div>
             """, unsafe_allow_html=True)
@@ -228,7 +228,7 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
             # Show actual values with enhanced styling
             st.markdown(f"""
             <div style="margin-top: 1rem;">
-                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1a1a2e; font-size: 0.9rem;">{t('measured_values')}:</p>
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1E3A5F; font-size: 0.9rem;">{t('measured_values')}:</p>
             </div>
             """, unsafe_allow_html=True)
 

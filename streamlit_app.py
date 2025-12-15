@@ -78,14 +78,22 @@ def inject_custom_css():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
 
-        /* Root variables for RCJY brand colors */
+        /* Root variables for RCJY brand colors - Professional palette */
         :root {{
-            --rcjy-orange: #E67E22;
-            --rcjy-gold: #F39C12;
-            --rcjy-dark: #1a1a2e;
-            --rcjy-green: #27ae60;
-            --rcjy-light: #f8fafc;
-            --rcjy-gray: #64748b;
+            --rcjy-primary: #1E3A5F;
+            --rcjy-primary-light: #2D4A6F;
+            --rcjy-primary-dark: #152C4A;
+            --rcjy-amber: #D97706;
+            --rcjy-amber-light: #F59E0B;
+            --rcjy-amber-dark: #B45309;
+            --rcjy-gold: #EAB308;
+            --rcjy-teal: #0D9488;
+            --rcjy-green: #059669;
+            --rcjy-light: #F8FAFC;
+            --rcjy-light-alt: #F1F5F9;
+            --rcjy-gray: #64748B;
+            --rcjy-gray-dark: #475569;
+            --rcjy-text-dark: #1E293B;
             --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
             --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
             --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
@@ -100,11 +108,12 @@ def inject_custom_css():
 
         /* Header styling */
         .rcjy-header {{
-            background: linear-gradient(135deg, var(--rcjy-dark) 0%, #16213e 100%);
+            background: linear-gradient(135deg, var(--rcjy-primary) 0%, var(--rcjy-primary-light) 50%, var(--rcjy-primary) 100%);
             padding: 1.5rem 2rem;
             border-radius: 16px;
             margin-bottom: 1.5rem;
             box-shadow: var(--shadow-lg);
+            border-bottom: 3px solid var(--rcjy-amber);
         }}
 
         .rcjy-header-content {{
@@ -185,8 +194,9 @@ def inject_custom_css():
         }}
 
         .stTabs [aria-selected="true"] {{
-            background-color: var(--rcjy-orange) !important;
+            background-color: var(--rcjy-primary) !important;
             color: white !important;
+            border-bottom: 2px solid var(--rcjy-amber) !important;
         }}
 
         /* Alert styling */
@@ -213,13 +223,13 @@ def inject_custom_css():
 
         [data-testid="stMetricLabel"] {{
             font-weight: 600;
-            color: var(--rcjy-dark);
+            color: var(--rcjy-text-dark);
         }}
 
         [data-testid="stMetricValue"] {{
             font-size: 1.75rem;
             font-weight: 700;
-            color: var(--rcjy-dark);
+            color: var(--rcjy-primary);
         }}
 
         /* Custom metric card class */
@@ -234,7 +244,7 @@ def inject_custom_css():
 
         /* Violation card with gradient */
         .violation-card {{
-            background: linear-gradient(135deg, var(--rcjy-orange) 0%, #d35400 100%);
+            background: linear-gradient(135deg, var(--rcjy-amber) 0%, var(--rcjy-amber-dark) 100%);
             color: white;
             padding: 1.5rem;
             border-radius: 12px;
@@ -244,13 +254,13 @@ def inject_custom_css():
 
         /* Section headers */
         h1 {{
-            color: var(--rcjy-dark);
+            color: var(--rcjy-primary);
             font-weight: 700;
             letter-spacing: -0.025em;
         }}
 
         h2, h3 {{
-            color: var(--rcjy-dark);
+            color: var(--rcjy-primary);
             font-weight: 600;
         }}
 
@@ -269,18 +279,31 @@ def inject_custom_css():
         }}
 
         .stButton > button[kind="primary"] {{
-            background: linear-gradient(135deg, var(--rcjy-orange) 0%, var(--rcjy-gold) 100%);
+            background: linear-gradient(135deg, var(--rcjy-primary) 0%, var(--rcjy-primary-light) 100%);
             border: none;
+            color: white;
         }}
 
         .stButton > button[kind="primary"]:hover {{
-            background: linear-gradient(135deg, #d35400 0%, var(--rcjy-orange) 100%);
+            background: linear-gradient(135deg, var(--rcjy-primary-dark) 0%, var(--rcjy-primary) 100%);
             transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(30, 58, 95, 0.3);
         }}
 
-        /* Sidebar styling */
+        /* Secondary/accent buttons */
+        .stButton > button[kind="secondary"] {{
+            background: var(--rcjy-amber);
+            border: none;
+            color: white;
+        }}
+
+        .stButton > button[kind="secondary"]:hover {{
+            background: var(--rcjy-amber-dark);
+        }}
+
+        /* Sidebar styling - Professional deep blue gradient */
         [data-testid="stSidebar"] {{
-            background: linear-gradient(180deg, var(--rcjy-dark) 0%, #16213e 100%);
+            background: linear-gradient(180deg, var(--rcjy-primary) 0%, var(--rcjy-primary-dark) 100%);
         }}
 
         [data-testid="stSidebar"] [data-testid="stMarkdown"] {{
@@ -290,7 +313,8 @@ def inject_custom_css():
         [data-testid="stSidebar"] .stSelectbox label,
         [data-testid="stSidebar"] .stSlider label,
         [data-testid="stSidebar"] .stCheckbox label {{
-            color: #ffffff !important;
+            color: #E2E8F0 !important;
+            font-weight: 500;
         }}
 
         [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{
@@ -301,13 +325,13 @@ def inject_custom_css():
         [data-testid="stSidebar"] .stCaption,
         [data-testid="stSidebar"] small,
         [data-testid="stSidebar"] [data-testid="stCaptionContainer"] {{
-            color: rgba(255,255,255,0.85) !important;
+            color: #CBD5E1 !important;
         }}
 
-        /* Sidebar info/alert boxes - Last Update box */
+        /* Sidebar info/alert boxes - Last Update box - Using teal accent */
         [data-testid="stSidebar"] [data-testid="stAlert"] {{
-            background-color: rgba(230, 126, 34, 0.2) !important;
-            border: 1px solid var(--rcjy-orange) !important;
+            background-color: rgba(13, 148, 136, 0.15) !important;
+            border: 1px solid var(--rcjy-teal) !important;
             border-radius: 8px;
         }}
 
@@ -317,24 +341,28 @@ def inject_custom_css():
             color: #ffffff !important;
         }}
 
-        /* Info box icon */
+        /* Info box icon - teal accent */
         [data-testid="stSidebar"] [data-testid="stAlert"] svg {{
-            fill: var(--rcjy-orange) !important;
-            stroke: var(--rcjy-orange) !important;
+            fill: var(--rcjy-teal) !important;
+            stroke: var(--rcjy-teal) !important;
         }}
 
         /* Sidebar selectbox dropdown */
         [data-testid="stSidebar"] [data-baseweb="select"] {{
-            background-color: rgba(255,255,255,0.1);
+            background-color: rgba(255,255,255,0.08);
         }}
 
         [data-testid="stSidebar"] [data-baseweb="select"] > div {{
-            background-color: rgba(255,255,255,0.1);
-            border-color: rgba(255,255,255,0.3);
+            background-color: rgba(255,255,255,0.08);
+            border-color: rgba(255,255,255,0.2);
             color: #ffffff;
         }}
 
-        /* Sidebar slider - remove ALL grey backgrounds */
+        [data-testid="stSidebar"] [data-baseweb="select"] > div:hover {{
+            border-color: var(--rcjy-amber-light);
+        }}
+
+        /* Sidebar slider - clean transparent backgrounds */
         [data-testid="stSidebar"] .stSlider {{
             background-color: transparent !important;
         }}
@@ -344,14 +372,14 @@ def inject_custom_css():
         }}
 
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {{
-            background-color: rgba(255,255,255,0.15) !important;
+            background-color: rgba(255,255,255,0.1) !important;
             border-radius: 10px;
         }}
 
-        /* Slider value text (30 minutes, 24 hours) */
+        /* Slider value text */
         [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMin"],
         [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMax"] {{
-            color: #ffffff !important;
+            color: #CBD5E1 !important;
             background-color: transparent !important;
         }}
 
@@ -363,16 +391,16 @@ def inject_custom_css():
             background-color: transparent !important;
         }}
 
-        /* Slider thumb (draggable circle) */
+        /* Slider thumb - warm amber accent */
         [data-testid="stSidebar"] .stSlider [role="slider"] {{
-            background-color: var(--rcjy-orange) !important;
-            border-color: var(--rcjy-orange) !important;
+            background-color: var(--rcjy-amber-light) !important;
+            border-color: var(--rcjy-amber-light) !important;
         }}
 
         /* Slider thumb value display */
         [data-testid="stSidebar"] [data-testid="stThumbValue"] {{
-            color: #ffffff !important;
-            background-color: var(--rcjy-orange) !important;
+            color: var(--rcjy-primary-dark) !important;
+            background-color: var(--rcjy-amber-light) !important;
             border: none !important;
             font-weight: 600;
             border-radius: 6px;
@@ -384,12 +412,12 @@ def inject_custom_css():
         }}
 
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div {{
-            background-color: var(--rcjy-orange) !important;
+            background-color: var(--rcjy-amber-light) !important;
         }}
 
         /* Sidebar toggle */
         [data-testid="stSidebar"] [data-testid="stCheckbox"] span {{
-            color: #ffffff;
+            color: #E2E8F0;
         }}
 
         /* Sidebar expander */
@@ -403,9 +431,10 @@ def inject_custom_css():
             color: #ffffff;
         }}
 
-        /* Sidebar divider - visible on dark bg */
+        /* Sidebar divider - subtle gold accent */
         [data-testid="stSidebar"] hr {{
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent) !important;
+            background: linear-gradient(90deg, transparent, var(--rcjy-amber-light), transparent) !important;
+            opacity: 0.4;
         }}
 
         /* Main content divider styling */
@@ -1836,18 +1865,18 @@ def main():
                 <div style="display: flex; align-items: center; gap: 0.75rem; flex-direction: row-reverse;">
                     <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 40px; width: auto;">
                     <div>
-                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1a1a2e;">الهيئة الملكية للجبيل وينبع</p>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">فريق مراقبة جودة الهواء</p>
+                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1E3A5F;">الهيئة الملكية للجبيل وينبع</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">فريق مراقبة جودة الهواء</p>
                     </div>
                 </div>
                 <div style="display: flex; gap: 2rem; flex-wrap: wrap; flex-direction: row-reverse;">
                     <div>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">مصدر البيانات</p>
-                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">ESA Sentinel-5P TROPOMI</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">مصدر البيانات</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1E3A5F;">ESA Sentinel-5P TROPOMI</p>
                     </div>
                     <div>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">وقت النظام</p>
-                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">وقت النظام</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1E3A5F;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
                     </div>
                 </div>
             </div>
@@ -1860,18 +1889,18 @@ def main():
                 <div style="display: flex; align-items: center; gap: 0.75rem;">
                     <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 40px; width: auto;">
                     <div>
-                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1a1a2e;">Royal Commission for Jubail and Yanbu</p>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">Air Quality Monitoring Team</p>
+                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1E3A5F;">Royal Commission for Jubail and Yanbu</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">Air Quality Monitoring Team</p>
                     </div>
                 </div>
                 <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
                     <div>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">Data Source</p>
-                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">ESA Sentinel-5P TROPOMI</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">Data Source</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1E3A5F;">ESA Sentinel-5P TROPOMI</p>
                     </div>
                     <div>
-                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">System Time</p>
-                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748B;">System Time</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1E3A5F;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
                     </div>
                 </div>
             </div>
