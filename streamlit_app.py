@@ -132,7 +132,10 @@ def inject_custom_css():
         .rcjy-logo {{
             height: 70px;
             width: auto;
-            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+            background: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }}
 
         .rcjy-title-section {{
