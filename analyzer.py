@@ -156,37 +156,46 @@ class PollutionAnalyzer:
             'threshold_source': threshold_config.get('source', 'Unknown')
         }
     
-    def find_nearby_factories(self, hotspot: Dict, city: str, 
+    def find_nearby_factories(self, hotspot: Dict, city: str,
                             max_distance_km: float = 20.0) -> List[Dict]:
         """
         Find factories near the pollution hotspot
-        
+
         Args:
             hotspot: Hotspot location dictionary
             city: City name
             max_distance_km: Maximum search radius
-            
+
         Returns:
-            List of nearby factories with distances
+            List of nearby factories with distances and default wind attributes
         """
         factories = config.FACTORIES.get(city, [])
         nearby = []
-        
+
         for factory in factories:
             distance = self._haversine_distance(
                 hotspot['lat'], hotspot['lon'],
                 factory['location'][0], factory['location'][1]
             )
-            
+
             if distance <= max_distance_km:
                 nearby.append({
                     **factory,
-                    'distance_km': distance
+                    'distance_km': distance,
+                    # Initialize wind-related attributes with safe defaults
+                    # These will be updated by calculate_wind_vector_to_factories() if wind data is available
+                    'likely_upwind': False,
+                    'confidence': 0.0,
+                    'bearing_to_hotspot': 0.0,
+                    'angle_from_wind': None,
+                    'scores': {},
+                    'composite_score': 0.0,
+                    'confidence_breakdown': {}
                 })
-        
+
         # Sort by distance
         nearby.sort(key=lambda f: f['distance_km'])
-        
+
         logger.info(f"Found {len(nearby)} factories within {max_distance_km}km of hotspot")
         return nearby
     
@@ -212,7 +221,7 @@ class PollutionAnalyzer:
         """
         wind_direction = wind_data.get('direction_deg')
         wind_success = wind_data.get('success', False)
-        wind_confidence = wind_data.get('confidence', 0 if not wind_success else wind_data.get('confidence', 100))
+        wind_confidence = wind_data.get('confidence', 0)  # Default to 0 if missing
         detected_gas = hotspot.get('gas', '')
 
         for factory in factories:
@@ -445,7 +454,7 @@ class PollutionAnalyzer:
    - Bearing to hotspot: {bearing:.0f}° (Factory is {self._get_direction_relative_to_hotspot(bearing)} of hotspot)
    - Produces: {', '.join(factory['emissions'])}
    - Emission match: {'✓ YES - produces {}'.format(violation_data['gas']) if violation_data['gas'] in factory['emissions'] else '✗ NO - does not produce {}'.format(violation_data['gas'])}
-   - Upwind status: {'✓ UPWIND (wind blows from factory to hotspot)' if factory['likely_upwind'] else '✗ NOT UPWIND (wind angle mismatch)'}
+   - Upwind status: {'✓ UPWIND (wind blows from factory to hotspot)' if factory.get('likely_upwind', False) else '✗ NOT UPWIND (wind angle mismatch)'}
    - Wind alignment: {angle_diff:.0f}° deviation from ideal
    - Confidence: {factory['confidence']:.0f}%
 """
@@ -625,7 +634,7 @@ Use the visual map to provide insights beyond the numerical data."""
         wind_deg = violation_data.get('wind', {}).get('direction_deg', 0)
 
         # Priority 1: Upwind + produces gas
-        upwind_emitters = [f for f in factories if gas in f['emissions'] and f['likely_upwind']]
+        upwind_emitters = [f for f in factories if gas in f['emissions'] and f.get('likely_upwind', False)]
         # Priority 2: Just produces gas (if no upwind match)
         all_emitters = [f for f in factories if gas in f['emissions']]
         # Non-emitters for exclusion reasoning
@@ -740,7 +749,7 @@ Use the visual map to provide insights beyond the numerical data."""
                 analysis += f"  - وقت رصد القمر الصناعي: {sat_time}\n"
                 analysis += f"  - الفارق الزمني: {time_offset:.1f} ساعات\n\n" if isinstance(time_offset, (int, float)) else f"  - الفارق الزمني: {time_offset}\n\n"
 
-                if top['likely_upwind']:
+                if top.get('likely_upwind', False):
                     analysis += f"✓ توافق الرياح: المصنع في اتجاه الرياح من البؤرة\n"
                     analysis += f"  - الرياح تهب من المصنع إلى بؤرة التلوث\n"
                     analysis += f"  - الاتجاه من المصنع: {top.get('bearing_to_hotspot', 0):.0f}°\n"
@@ -779,7 +788,7 @@ Use the visual map to provide insights beyond the numerical data."""
                             analysis += f"  - مُدرج كمصدر بديل\n"
 
                 other_downwind = [f for f in all_emitters
-                                if not f['likely_upwind']
+                                if not f.get('likely_upwind', False)
                                 and f['name'] != top['name']
                                 and f not in similar_distance_emitters]
                 if other_downwind:
@@ -790,7 +799,7 @@ Use the visual map to provide insights beyond the numerical data."""
                 # Overall confidence
                 if wind_confidence < 50:
                     analysis += f"⚠️ الثقة الإجمالية: متوسطة-منخفضة (عدم يقين بيانات الرياح)\n\n"
-                elif top['likely_upwind'] and top['distance_km'] < 5:
+                elif top.get('likely_upwind', False) and top['distance_km'] < 5:
                     analysis += f"✓ الثقة الإجمالية: عالية (في اتجاه الرياح + قريب + تطابق الانبعاثات)\n\n"
                 else:
                     analysis += f"✓ الثقة الإجمالية: متوسطة (تم تأكيد تطابق الانبعاثات)\n\n"
@@ -820,7 +829,7 @@ Use the visual map to provide insights beyond the numerical data."""
                 analysis += f"  - Satellite observation time: {sat_time}\n"
                 analysis += f"  - Time offset: {time_offset:.1f} hours\n\n" if isinstance(time_offset, (int, float)) else f"  - Time offset: {time_offset}\n\n"
 
-                if top['likely_upwind']:
+                if top.get('likely_upwind', False):
                     analysis += f"✓ Wind Alignment: Factory IS upwind of hotspot\n"
                     analysis += f"  - Wind blows FROM factory TO pollution hotspot\n"
                     analysis += f"  - Bearing from factory: {top.get('bearing_to_hotspot', 0):.0f}°\n"
@@ -859,7 +868,7 @@ Use the visual map to provide insights beyond the numerical data."""
                             analysis += f"  - Listed as alternative source\n"
 
                 other_downwind = [f for f in all_emitters
-                                if not f['likely_upwind']
+                                if not f.get('likely_upwind', False)
                                 and f['name'] != top['name']
                                 and f not in similar_distance_emitters]
                 if other_downwind:
@@ -870,7 +879,7 @@ Use the visual map to provide insights beyond the numerical data."""
                 # Overall confidence
                 if wind_confidence < 50:
                     analysis += f"⚠️ OVERALL CONFIDENCE: MEDIUM-LOW (wind data uncertainty)\n\n"
-                elif top['likely_upwind'] and top['distance_km'] < 5:
+                elif top.get('likely_upwind', False) and top['distance_km'] < 5:
                     analysis += f"✓ OVERALL CONFIDENCE: HIGH (upwind + close + emission match)\n\n"
                 else:
                     analysis += f"✓ OVERALL CONFIDENCE: MEDIUM (emission match confirmed)\n\n"
