@@ -62,104 +62,196 @@ def create_aqi_dashboard(pollution_data: Dict, validator) -> None:
 
         col1, col2, col3 = st.columns([2, 3, 2])
         with col1:
-            # SPI Gauge - scale 0-200 based on threshold percentages
-            # Using Tailwind CSS color palette for consistency
+            # Enhanced SPI Gauge with RCJY brand colors
+            # Determine gauge bar color based on percentage
+            pct = max_spi['Percentage']
+            if pct >= 150:
+                gauge_color = "#dc2626"  # Critical red
+            elif pct >= 100:
+                gauge_color = "#E67E22"  # RCJY orange
+            elif pct >= 75:
+                gauge_color = "#F39C12"  # RCJY gold
+            else:
+                gauge_color = "#27ae60"  # RCJY green
+
             fig = go.Figure(go.Indicator(
                 mode="gauge",
                 value=max_spi['Index'],
                 domain={'x': [0, 1], 'y': [0.15, 1]},
                 gauge={
-                    'axis': {'range': [0, 200], 'tickwidth': 1, 'tickvals': [0, 50, 75, 100, 150, 200]},
-                    'bar': {'color': max_spi['Color']},
+                    'axis': {
+                        'range': [0, 200],
+                        'tickwidth': 2,
+                        'tickvals': [0, 50, 75, 100, 150, 200],
+                        'tickcolor': "#1a1a2e",
+                        'tickfont': {'size': 11, 'color': '#64748b'}
+                    },
+                    'bar': {'color': gauge_color, 'thickness': 0.85},
+                    'bgcolor': '#f1f5f9',
+                    'borderwidth': 2,
+                    'bordercolor': '#e2e8f0',
                     'steps': [
-                        {'range': [0, 50], 'color': "#dcfce7"},    # Background - green-100
-                        {'range': [50, 75], 'color': "#bbf7d0"},   # Normal - green-200
-                        {'range': [75, 100], 'color': "#fef08a"},  # Elevated - yellow-200
-                        {'range': [100, 150], 'color': "#fed7aa"}, # Violation - orange-200
-                        {'range': [150, 200], 'color': "#fecaca"}  # Critical - red-200
+                        {'range': [0, 50], 'color': "#d1fae5"},     # Background - emerald-100
+                        {'range': [50, 75], 'color': "#a7f3d0"},    # Normal - emerald-200
+                        {'range': [75, 100], 'color': "#fef3c7"},   # Elevated - amber-100
+                        {'range': [100, 150], 'color': "#fed7aa"},  # Violation - orange-200
+                        {'range': [150, 200], 'color': "#fecaca"}   # Critical - red-200
                     ],
                     'threshold': {
-                        'line': {'color': "#dc2626", 'width': 4},  # red-600
-                        'thickness': 0.75,
-                        'value': 100  # Violation threshold
+                        'line': {'color': "#dc2626", 'width': 3},
+                        'thickness': 0.8,
+                        'value': 100
                     }
                 }
             ))
-            # Add centered number and title as annotations
+            # Add centered percentage with enhanced styling
             fig.add_annotation(
-                x=0.5, y=0.35,
+                x=0.5, y=0.38,
                 text=f"<b>{int(max_spi['Percentage'])}%</b>",
-                font=dict(size=48, color="#333"),
+                font=dict(size=52, color="#1a1a2e", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='middle'
             )
             fig.add_annotation(
-                x=0.5, y=0.15,
+                x=0.5, y=0.18,
                 text=t('of_threshold'),
-                font=dict(size=14, color="#666"),
+                font=dict(size=13, color="#64748b", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='middle'
             )
             fig.add_annotation(
-                x=0.5, y=0.95,
-                text=t('worst_pollutant'),
-                font=dict(size=16, color="#333"),
+                x=0.5, y=0.97,
+                text=f"<b>{t('worst_pollutant')}</b>",
+                font=dict(size=14, color="#1a1a2e", family="Inter, sans-serif"),
                 showarrow=False,
                 xanchor='center',
                 yanchor='top'
             )
             fig.update_layout(
-                height=300,
-                margin=dict(l=40, r=40, t=30, b=20),
-                autosize=True
+                height=320,
+                margin=dict(l=30, r=30, t=35, b=15),
+                autosize=True,
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
             )
             st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
 
         with col2:
-            st.metric(t('pollution_status'), max_spi['CategoryTranslated'])
-            st.markdown(f"**{t('dominant_pollutant')}:** {max_spi['Gas']} ({max_spi['Percentage']}% {t('of_threshold_label')})")
+            # Enhanced status display with styled card
+            status_color = max_spi['Color']
+            st.markdown(f"""
+            <div style="background: linear-gradient(135deg, {status_color}15, {status_color}05);
+                        border-left: 4px solid {status_color};
+                        padding: 1rem 1.25rem;
+                        border-radius: 8px;
+                        margin-bottom: 1rem;">
+                <p style="margin: 0; font-size: 0.8rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;">{t('pollution_status')}</p>
+                <p style="margin: 0.25rem 0 0 0; font-size: 1.5rem; font-weight: 700; color: {status_color};">{max_spi['CategoryTranslated']}</p>
+                <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem; color: #1a1a2e;"><strong>{t('dominant_pollutant')}:</strong> {max_spi['Gas']} ({max_spi['Percentage']:.0f}% {t('of_threshold_label')})</p>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # SPI breakdown by gas - show percentage of threshold
-            # Using Tailwind CSS color palette for consistency
+            # Enhanced SPI breakdown bar chart with RCJY brand colors
             df_spi = pd.DataFrame(spi_data)
             fig_bar = px.bar(df_spi, x='Gas', y='Percentage', color='CategoryTranslated',
                             color_discrete_map={
-                                t('spi_background'): '#22c55e',  # green-500
-                                t('spi_normal'): '#4ade80',      # green-400
-                                t('spi_elevated'): '#eab308',    # yellow-500
-                                t('spi_violation'): '#f97316',   # orange-500
-                                t('spi_critical'): '#ef4444',    # red-500
+                                t('spi_background'): '#27ae60',  # RCJY green
+                                t('spi_normal'): '#2ecc71',      # Light green
+                                t('spi_elevated'): '#F39C12',    # RCJY gold
+                                t('spi_violation'): '#E67E22',   # RCJY orange
+                                t('spi_critical'): '#dc2626',    # Critical red
                                 # Fallback for English categories
-                                'Background': '#22c55e',
-                                'Normal': '#4ade80',
-                                'Elevated': '#eab308',
-                                'Violation': '#f97316',
-                                'Critical': '#ef4444'
+                                'Background': '#27ae60',
+                                'Normal': '#2ecc71',
+                                'Elevated': '#F39C12',
+                                'Violation': '#E67E22',
+                                'Critical': '#dc2626'
                             },
-                            title=t('threshold_by_pollutant'))
+                            title=f"<b>{t('threshold_by_pollutant')}</b>")
             # Add 100% reference line
-            fig_bar.add_hline(y=100, line_dash="dash", line_color="#dc2626",
-                            annotation_text=t('violation_threshold'))
-            fig_bar.update_layout(height=220, showlegend=False,
-                                yaxis_title=t('percent_of_threshold'))
+            fig_bar.add_hline(y=100, line_dash="dash", line_color="#dc2626", line_width=2,
+                            annotation_text=f"<b>{t('violation_threshold')}</b>",
+                            annotation_font_color="#dc2626")
+            fig_bar.update_layout(
+                height=240,
+                showlegend=False,
+                yaxis_title=t('percent_of_threshold'),
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)',
+                font=dict(family="Inter, sans-serif"),
+                title_font=dict(size=14, color="#1a1a2e"),
+                xaxis=dict(
+                    tickfont=dict(size=12, color="#1a1a2e"),
+                    gridcolor='rgba(0,0,0,0)'
+                ),
+                yaxis=dict(
+                    tickfont=dict(size=11, color="#64748b"),
+                    gridcolor='#e2e8f0'
+                )
+            )
+            fig_bar.update_traces(
+                marker_line_width=0,
+                opacity=0.9
+            )
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col3:
-            # Health recommendations
-            st.info(f"**{t('health_advice')}:**")
+            # Enhanced health recommendations card
             spi_info = validator.calculate_satellite_pollution_index(
                 max_spi['Gas'],
                 pollution_data[max_spi['Gas']]['statistics']['max']
             )
-            st.write(spi_info['health_implications'])
 
-            # Show actual values
-            st.markdown(f"**{t('measured_values')}:**")
+            # Determine advice icon and color based on severity
+            if max_spi['Percentage'] >= 100:
+                advice_icon = "⚠️"
+                advice_bg = "#fee2e2"
+                advice_border = "#dc2626"
+            elif max_spi['Percentage'] >= 75:
+                advice_icon = "💡"
+                advice_bg = "#fef3c7"
+                advice_border = "#F39C12"
+            else:
+                advice_icon = "✅"
+                advice_bg = "#d1fae5"
+                advice_border = "#27ae60"
+
+            st.markdown(f"""
+            <div style="background: {advice_bg}; border-radius: 12px; padding: 1rem; border: 1px solid {advice_border}20;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1a1a2e;">{advice_icon} {t('health_advice')}</p>
+                <p style="margin: 0; font-size: 0.9rem; color: #374151; line-height: 1.5;">{spi_info['health_implications']}</p>
+            </div>
+            """, unsafe_allow_html=True)
+
+            # Show actual values with enhanced styling
+            st.markdown(f"""
+            <div style="margin-top: 1rem;">
+                <p style="margin: 0 0 0.5rem 0; font-weight: 600; color: #1a1a2e; font-size: 0.9rem;">{t('measured_values')}:</p>
+            </div>
+            """, unsafe_allow_html=True)
+
             for item in sorted(spi_data, key=lambda x: x['Percentage'], reverse=True)[:3]:
-                status_icon = "🔴" if item['Percentage'] >= 100 else "🟡" if item['Percentage'] >= 75 else "🟢"
-                st.caption(f"{status_icon} {item['Gas']}: {item['Value']:.2f} {item['Unit']}")
+                if item['Percentage'] >= 100:
+                    badge_bg = "#fee2e2"
+                    badge_color = "#991b1b"
+                    status_dot = "🔴"
+                elif item['Percentage'] >= 75:
+                    badge_bg = "#fef3c7"
+                    badge_color = "#92400e"
+                    status_dot = "🟡"
+                else:
+                    badge_bg = "#d1fae5"
+                    badge_color = "#166534"
+                    status_dot = "🟢"
+
+                st.markdown(f"""
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.4rem 0.6rem; background: {badge_bg}; border-radius: 6px; margin-bottom: 0.3rem;">
+                    <span style="font-size: 0.8rem; color: {badge_color};">{status_dot} {item['Gas']}</span>
+                    <span style="font-size: 0.8rem; font-weight: 600; color: {badge_color};">{item['Value']:.2f} {item['Unit']}</span>
+                </div>
+                """, unsafe_allow_html=True)
     else:
         st.warning(t('no_data_for_index'))
 

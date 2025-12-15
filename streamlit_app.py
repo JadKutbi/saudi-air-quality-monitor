@@ -54,9 +54,12 @@ st.set_page_config(
     }
 )
 
+# RCJY Logo URL
+RCJY_LOGO_URL = "https://www.rcjy.gov.sa/documents/5272171/0/color-logo.png/8a44644a-5216-1eaa-9c2a-99d90dd27c2d?t=1720515544958"
+
 # Custom CSS for professional styling - injected after language is set
 def inject_custom_css():
-    """Inject CSS including RTL support for Arabic."""
+    """Inject CSS including RTL support for Arabic with RCJY branding."""
     lang = st.session_state.get('language', 'en')
     direction = get_direction(lang)
     font_family = get_font_family(lang)
@@ -73,39 +76,269 @@ def inject_custom_css():
 
     st.markdown(f"""
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
+
+        /* Root variables for RCJY brand colors */
+        :root {{
+            --rcjy-orange: #E67E22;
+            --rcjy-gold: #F39C12;
+            --rcjy-dark: #1a1a2e;
+            --rcjy-green: #27ae60;
+            --rcjy-light: #f8fafc;
+            --rcjy-gray: #64748b;
+            --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+            --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }}
 
         .main {{
-            padding-top: 2rem;
+            padding-top: 1rem;
             direction: {direction};
             font-family: {font_family};
+            background-color: var(--rcjy-light);
         }}
+
+        /* Header styling */
+        .rcjy-header {{
+            background: linear-gradient(135deg, var(--rcjy-dark) 0%, #16213e 100%);
+            padding: 1.5rem 2rem;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+            box-shadow: var(--shadow-lg);
+        }}
+
+        .rcjy-header-content {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1.5rem;
+        }}
+
+        .rcjy-logo-section {{
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }}
+
+        .rcjy-logo {{
+            height: 70px;
+            width: auto;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.2));
+        }}
+
+        .rcjy-title-section {{
+            color: white;
+        }}
+
+        .rcjy-title {{
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin: 0;
+            color: white;
+            letter-spacing: -0.025em;
+        }}
+
+        .rcjy-subtitle {{
+            font-size: 0.9rem;
+            color: rgba(255,255,255,0.8);
+            margin: 0.25rem 0 0 0;
+            font-weight: 400;
+        }}
+
+        .rcjy-time-badge {{
+            background: rgba(255,255,255,0.15);
+            backdrop-filter: blur(10px);
+            padding: 0.75rem 1.25rem;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+        }}
+
+        .rcjy-time-label {{
+            font-size: 0.75rem;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin: 0;
+        }}
+
+        .rcjy-time-value {{
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: white;
+            margin: 0;
+        }}
+
+        /* Tab styling */
+        .stTabs [data-baseweb="tab-list"] {{
+            gap: 8px;
+            background-color: white;
+            padding: 0.5rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-sm);
+        }}
+
+        .stTabs [data-baseweb="tab"] {{
+            border-radius: 8px;
+            padding: 0.5rem 1rem;
+            font-weight: 500;
+            color: var(--rcjy-gray);
+        }}
+
+        .stTabs [aria-selected="true"] {{
+            background-color: var(--rcjy-orange) !important;
+            color: white !important;
+        }}
+
+        /* Alert styling */
         .stAlert {{
-            border-radius: 10px;
-            border: 1px solid;
+            border-radius: 12px;
+            border: none;
+            box-shadow: var(--shadow-sm);
         }}
+
+        /* Metric cards */
+        .stMetric {{
+            background: white;
+            padding: 1.25rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow-md);
+            border: 1px solid #e2e8f0;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }}
+
+        .stMetric:hover {{
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }}
+
+        [data-testid="stMetricLabel"] {{
+            font-weight: 600;
+            color: var(--rcjy-dark);
+        }}
+
+        [data-testid="stMetricValue"] {{
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--rcjy-dark);
+        }}
+
+        /* Custom metric card class */
         .metric-card {{
-            background-color: #f0f2f6;
-            border-radius: 10px;
-            padding: 1rem;
-            margin: 0.5rem;
+            background: white;
+            border-radius: 12px;
+            padding: 1.25rem;
+            margin: 0.5rem 0;
+            box-shadow: var(--shadow-md);
+            border: 1px solid #e2e8f0;
         }}
+
+        /* Violation card with gradient */
         .violation-card {{
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--rcjy-orange) 0%, #d35400 100%);
             color: white;
             padding: 1.5rem;
-            border-radius: 10px;
+            border-radius: 12px;
             margin: 1rem 0;
+            box-shadow: var(--shadow-lg);
         }}
+
+        /* Section headers */
         h1 {{
-            color: #1e3a8a;
+            color: var(--rcjy-dark);
+            font-weight: 700;
+            letter-spacing: -0.025em;
         }}
-        .stMetric {{
-            background-color: #ffffff;
-            padding: 1rem;
-            border-radius: 10px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+
+        h2, h3 {{
+            color: var(--rcjy-dark);
+            font-weight: 600;
         }}
+
+        /* Expander styling */
+        .streamlit-expanderHeader {{
+            background-color: white;
+            border-radius: 8px;
+            font-weight: 500;
+        }}
+
+        /* Button styling */
+        .stButton > button {{
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }}
+
+        .stButton > button[kind="primary"] {{
+            background: linear-gradient(135deg, var(--rcjy-orange) 0%, var(--rcjy-gold) 100%);
+            border: none;
+        }}
+
+        .stButton > button[kind="primary"]:hover {{
+            background: linear-gradient(135deg, #d35400 0%, var(--rcjy-orange) 100%);
+            transform: translateY(-1px);
+        }}
+
+        /* Sidebar styling */
+        [data-testid="stSidebar"] {{
+            background: linear-gradient(180deg, var(--rcjy-dark) 0%, #16213e 100%);
+        }}
+
+        [data-testid="stSidebar"] [data-testid="stMarkdown"] {{
+            color: rgba(255,255,255,0.9);
+        }}
+
+        [data-testid="stSidebar"] .stSelectbox label {{
+            color: rgba(255,255,255,0.9);
+        }}
+
+        [data-testid="stSidebar"] h1, [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 {{
+            color: white;
+        }}
+
+        /* Divider styling */
+        hr {{
+            border: none;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, #e2e8f0, transparent);
+            margin: 1.5rem 0;
+        }}
+
+        /* Status badges */
+        .status-badge {{
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 9999px;
+            font-weight: 500;
+            font-size: 0.875rem;
+        }}
+
+        .status-safe {{
+            background-color: #dcfce7;
+            color: #166534;
+        }}
+
+        .status-warning {{
+            background-color: #fef3c7;
+            color: #92400e;
+        }}
+
+        .status-danger {{
+            background-color: #fee2e2;
+            color: #991b1b;
+        }}
+
+        /* Footer styling */
+        .rcjy-footer {{
+            background: white;
+            padding: 1rem 1.5rem;
+            border-radius: 12px;
+            margin-top: 2rem;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid #e2e8f0;
+        }}
+
         {rtl_css}
         </style>
         """, unsafe_allow_html=True)
@@ -218,22 +451,65 @@ def initialize_services():
             services.get('recorder'))
 
 def create_header():
-    """Display application header with title and current time."""
-    col1, col2 = st.columns([4, 1])
+    """Display professional application header with RCJY branding."""
+    lang = st.session_state.get('language', 'en')
+    ksa_tz = pytz.timezone(config.TIMEZONE)
+    current_time = datetime.now(ksa_tz).strftime("%H:%M")
+    current_date = datetime.now(ksa_tz).strftime("%Y-%m-%d")
 
-    with col1:
-        st.title(f"🌍 {t('app_title')}")
-        st.caption(t('app_subtitle'))
+    # Professional header with RCJY logo
+    if lang == 'ar':
+        header_html = f"""
+        <div class="rcjy-header">
+            <div class="rcjy-header-content" style="flex-direction: row-reverse;">
+                <div class="rcjy-logo-section" style="flex-direction: row-reverse;">
+                    <img src="{RCJY_LOGO_URL}" alt="RCJY Logo" class="rcjy-logo">
+                    <div class="rcjy-title-section" style="text-align: right;">
+                        <h1 class="rcjy-title">{t('app_title')}</h1>
+                        <p class="rcjy-subtitle">{t('app_subtitle')}</p>
+                    </div>
+                </div>
+                <div class="rcjy-time-badge">
+                    <p class="rcjy-time-label">{t('time_label')}</p>
+                    <p class="rcjy-time-value">{current_time} KSA</p>
+                    <p class="rcjy-time-label" style="margin-top: 4px; font-size: 0.7rem;">{current_date}</p>
+                </div>
+            </div>
+        </div>
+        """
+    else:
+        header_html = f"""
+        <div class="rcjy-header">
+            <div class="rcjy-header-content">
+                <div class="rcjy-logo-section">
+                    <img src="{RCJY_LOGO_URL}" alt="RCJY Logo" class="rcjy-logo">
+                    <div class="rcjy-title-section">
+                        <h1 class="rcjy-title">{t('app_title')}</h1>
+                        <p class="rcjy-subtitle">{t('app_subtitle')}</p>
+                    </div>
+                </div>
+                <div class="rcjy-time-badge">
+                    <p class="rcjy-time-label">{t('time_label')}</p>
+                    <p class="rcjy-time-value">{current_time} KSA</p>
+                    <p class="rcjy-time-label" style="margin-top: 4px; font-size: 0.7rem;">{current_date}</p>
+                </div>
+            </div>
+        </div>
+        """
 
-    with col2:
-        ksa_tz = pytz.timezone(config.TIMEZONE)
-        current_time = datetime.now(ksa_tz).strftime("%H:%M KSA")
-        st.metric(t('time_label'), current_time)
+    st.markdown(header_html, unsafe_allow_html=True)
 
 def create_sidebar():
     """Configure sidebar with city selection, language toggle, and refresh controls."""
     with st.sidebar:
-        # Language selector at the top
+        # RCJY Logo in sidebar
+        st.markdown(f"""
+        <div style="text-align: center; padding: 1rem 0 1.5rem 0;">
+            <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 60px; width: auto; filter: brightness(1.1);">
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Language selector with enhanced styling
         st.selectbox(
             "🌐 Language / اللغة",
             options=["en", "ar"],
@@ -1432,17 +1708,62 @@ def main():
         st.header(f"📜 {t('tab_history')}")
         display_violation_history(city)
 
-    # Footer with enhanced information
-    st.divider()
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.caption(f"**{t('data_source')}:** ESA Sentinel-5P TROPOMI")
-    with col2:
-        st.caption(f"**{t('standards')}:** Sentinel-5P")
-    with col3:
-        ksa_tz = pytz.timezone(config.TIMEZONE)
-        current_time = datetime.now(ksa_tz)
-        st.caption(f"**{t('system_time')}:** {current_time.strftime('%Y-%m-%d %H:%M:%S KSA')}")
+    # Professional footer with RCJY branding
+    st.markdown("---")
+    lang = st.session_state.get('language', 'en')
+    ksa_tz = pytz.timezone(config.TIMEZONE)
+    current_time = datetime.now(ksa_tz)
+
+    if lang == 'ar':
+        footer_html = f"""
+        <div class="rcjy-footer" style="direction: rtl; text-align: right;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; flex-direction: row-reverse;">
+                <div style="display: flex; align-items: center; gap: 0.75rem; flex-direction: row-reverse;">
+                    <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 40px; width: auto;">
+                    <div>
+                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1a1a2e;">الهيئة الملكية للجبيل وينبع</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">فريق مراقبة جودة الهواء</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap; flex-direction: row-reverse;">
+                    <div>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">مصدر البيانات</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">ESA Sentinel-5P TROPOMI</p>
+                    </div>
+                    <div>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">وقت النظام</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+    else:
+        footer_html = f"""
+        <div class="rcjy-footer">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+                <div style="display: flex; align-items: center; gap: 0.75rem;">
+                    <img src="{RCJY_LOGO_URL}" alt="RCJY" style="height: 40px; width: auto;">
+                    <div>
+                        <p style="margin: 0; font-size: 0.8rem; font-weight: 600; color: #1a1a2e;">Royal Commission for Jubail and Yanbu</p>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">Air Quality Monitoring Team</p>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 2rem; flex-wrap: wrap;">
+                    <div>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">Data Source</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">ESA Sentinel-5P TROPOMI</p>
+                    </div>
+                    <div>
+                        <p style="margin: 0; font-size: 0.7rem; color: #64748b;">System Time</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: #1a1a2e;">{current_time.strftime('%Y-%m-%d %H:%M:%S')} KSA</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+        """
+
+    st.markdown(footer_html, unsafe_allow_html=True)
 
     # Pre-fetch other cities after main content is displayed
     if other_cities:
