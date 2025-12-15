@@ -304,11 +304,23 @@ def inject_custom_css():
             color: rgba(255,255,255,0.85) !important;
         }}
 
-        /* Sidebar info/alert boxes */
+        /* Sidebar info/alert boxes - Last Update box */
         [data-testid="stSidebar"] [data-testid="stAlert"] {{
-            background-color: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.2);
-            color: #ffffff;
+            background-color: rgba(230, 126, 34, 0.2) !important;
+            border: 1px solid var(--rcjy-orange) !important;
+            border-radius: 8px;
+        }}
+
+        [data-testid="stSidebar"] [data-testid="stAlert"] p,
+        [data-testid="stSidebar"] [data-testid="stAlert"] span,
+        [data-testid="stSidebar"] [data-testid="stAlert"] div {{
+            color: #ffffff !important;
+        }}
+
+        /* Info box icon */
+        [data-testid="stSidebar"] [data-testid="stAlert"] svg {{
+            fill: var(--rcjy-orange) !important;
+            stroke: var(--rcjy-orange) !important;
         }}
 
         /* Sidebar selectbox dropdown */
@@ -322,28 +334,43 @@ def inject_custom_css():
             color: #ffffff;
         }}
 
-        /* Sidebar slider track */
+        /* Sidebar slider - remove ALL grey backgrounds */
+        [data-testid="stSidebar"] .stSlider {{
+            background-color: transparent !important;
+        }}
+
+        [data-testid="stSidebar"] .stSlider > div {{
+            background-color: transparent !important;
+        }}
+
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] {{
-            background-color: rgba(255,255,255,0.2);
+            background-color: rgba(255,255,255,0.15) !important;
+            border-radius: 10px;
         }}
 
-        /* Sidebar slider value text (30 minutes, 24 hours, etc.) */
+        /* Slider value text (30 minutes, 24 hours) */
         [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMin"],
-        [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMax"],
-        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] div {{
+        [data-testid="stSidebar"] .stSlider [data-testid="stTickBarMax"] {{
             color: #ffffff !important;
+            background-color: transparent !important;
         }}
 
-        /* Slider thumb (the draggable circle) */
-        [data-testid="stSidebar"] .stSlider [role="slider"],
-        [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] [role="slider"] {{
+        /* All text inside slider */
+        [data-testid="stSidebar"] .stSlider div,
+        [data-testid="stSidebar"] .stSlider span,
+        [data-testid="stSidebar"] .stSlider p {{
+            color: #ffffff !important;
+            background-color: transparent !important;
+        }}
+
+        /* Slider thumb (draggable circle) */
+        [data-testid="stSidebar"] .stSlider [role="slider"] {{
             background-color: var(--rcjy-orange) !important;
             border-color: var(--rcjy-orange) !important;
         }}
 
-        /* Slider thumb value display box */
-        [data-testid="stSidebar"] [data-testid="stThumbValue"],
-        [data-testid="stSidebar"] .stSlider [data-testid="stThumbValue"] {{
+        /* Slider thumb value display */
+        [data-testid="stSidebar"] [data-testid="stThumbValue"] {{
             color: #ffffff !important;
             background-color: var(--rcjy-orange) !important;
             border: none !important;
@@ -351,12 +378,11 @@ def inject_custom_css():
             border-radius: 6px;
         }}
 
-        /* Remove grey box - slider inner track */
+        /* Slider track and progress */
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div {{
             background-color: transparent !important;
         }}
 
-        /* Slider filled portion (progress) */
         [data-testid="stSidebar"] .stSlider [data-baseweb="slider"] > div > div {{
             background-color: var(--rcjy-orange) !important;
         }}
