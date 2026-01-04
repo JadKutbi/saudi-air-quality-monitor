@@ -187,20 +187,13 @@ class SatelliteDataFetcher:
             band_data = image.select(gas_config["band"])
 
             # Calculate statistics WITHIN this single image across the city area:
-            # - mean: average pollution across all pixels in the city
-            # - max: hotspot (highest pollution pixel in the city)
-            # - min: lowest pollution pixel in the city
-            # NOTE: We're NOT averaging multiple images - this is one image's spatial statistics
-
-            # Try multiple scales to handle sparse/cloud-affected data
-            # Start with fine scale, progressively coarser if needed
+            # Calculate spatial statistics (mean, max, min) for the area
             stats = None
             mean_val = None
             max_val = None
             min_val = None
 
-            # CRITICAL FIX: Use Sentinel-5P native resolution (1113m) first
-            # Official resolution from GEE documentation
+            # Try multiple scales (Sentinel-5P native: 1113m)
             for scale in [1113, 2000, 5000, 10000]:
                 stats = band_data.reduceRegion(
                     reducer=ee.Reducer.mean().combine(

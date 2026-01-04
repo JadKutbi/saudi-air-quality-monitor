@@ -182,8 +182,6 @@ class PollutionAnalyzer:
                 nearby.append({
                     **factory,
                     'distance_km': distance,
-                    # Initialize wind-related attributes with safe defaults
-                    # These will be updated by calculate_wind_vector_to_factories() if wind data is available
                     'likely_upwind': False,
                     'confidence': 0.0,
                     'bearing_to_hotspot': 0.0,
@@ -203,21 +201,12 @@ class PollutionAnalyzer:
                                           factories: List[Dict],
                                           wind_data: Dict) -> List[Dict]:
         """
-        ENHANCED: Multi-factor scoring system for factory attribution
+        Multi-factor scoring for factory attribution.
 
-        Scoring factors:
-        - Wind alignment (40% weight): How well factory aligns with wind direction
-        - Distance (30% weight): Proximity to hotspot (exponential decay)
-        - Emission match (20% weight): Does factory produce detected gas?
-        - Wind confidence (10% adjustment): Quality of wind data
+        Weights: Wind alignment (40%), Distance (30%), Emission match (20%),
+        Wind data quality (10% adjustment).
 
-        Args:
-            hotspot: Pollution hotspot location
-            factories: List of nearby factories
-            wind_data: Wind direction and speed data
-
-        Returns:
-            Factories ranked by composite confidence score
+        Returns factories ranked by confidence score.
         """
         wind_direction = wind_data.get('direction_deg')
         wind_success = wind_data.get('success', False)
@@ -232,44 +221,27 @@ class PollutionAnalyzer:
             )
 
             factory['bearing_to_hotspot'] = bearing
-
-            # Initialize scores dictionary
             scores = {}
 
             if wind_success and wind_direction is not None:
-                # === WIND DIRECTION LOGIC ===
-                # Wind blows FROM wind_direction (meteorological convention)
-                # Example: Wind at 90° (East) blows FROM the East TO the West
-                #
-                # Factory is upwind if:
-                # - Wind blows FROM the factory TO the hotspot
-                # - Factory is located at the wind direction bearing FROM the hotspot
-                #
-                # Calculation:
-                # 1. bearing_to_hotspot = bearing FROM factory TO hotspot
-                # 2. reverse_bearing = bearing FROM hotspot TO factory = (bearing + 180°) % 360
-                # 3. Wind blows FROM wind_direction, so factory is upwind if reverse_bearing ≈ wind_direction
-
-                reverse_bearing = (bearing + 180) % 360  # FROM hotspot TO factory
+                # Check if factory is upwind (wind blows from factory to hotspot)
+                reverse_bearing = (bearing + 180) % 360
                 angle_diff = abs((reverse_bearing - wind_direction + 180) % 360 - 180)
 
-                # === 1. WIND ALIGNMENT SCORE (0-100) ===
-                # Perfect alignment = 100, decreases with angle deviation
                 if angle_diff <= 15:
-                    scores['wind'] = 100.0 - (angle_diff * 2.0)  # 100 at 0°, 70 at 15°
+                    scores['wind'] = 100.0 - (angle_diff * 2.0)
                 elif angle_diff <= 30:
-                    scores['wind'] = 70.0 - ((angle_diff - 15) * 2.0)  # 70 at 15°, 40 at 30°
+                    scores['wind'] = 70.0 - ((angle_diff - 15) * 2.0)
                 elif angle_diff <= 60:
-                    scores['wind'] = 40.0 - ((angle_diff - 30) * 1.0)  # 40 at 30°, 10 at 60°
+                    scores['wind'] = 40.0 - ((angle_diff - 30) * 1.0)
                 elif angle_diff <= 90:
-                    scores['wind'] = max(0.0, 10.0 - ((angle_diff - 60) * 0.33))  # 10 at 60°, 0 at 90°
+                    scores['wind'] = max(0.0, 10.0 - ((angle_diff - 60) * 0.33))
                 else:
-                    scores['wind'] = 0.0  # No credit for wrong direction
+                    scores['wind'] = 0.0
 
                 factory['angle_from_wind'] = angle_diff
-                factory['likely_upwind'] = bool(angle_diff < 30)  # Stricter threshold
+                factory['likely_upwind'] = bool(angle_diff < 30)
 
-                # DETAILED LOGGING for debugging
                 logger.info(
                     f"Factory: {factory['name'][:30]:<30} | "
                     f"Factory→Hotspot: {bearing:>3.0f}° | "
@@ -284,43 +256,27 @@ class PollutionAnalyzer:
                 factory['angle_from_wind'] = None
                 factory['likely_upwind'] = False
 
-            # === 2. DISTANCE SCORE (0-100) ===
-            # Closer factories score higher (exponential decay)
-            # Score = 100 * e^(-distance/5km)
-            # 0km=100, 3km=55, 5km=37, 10km=14, 15km=5
+            # Distance score (exponential decay)
             distance_km = factory.get('distance_km', 100)
             scores['distance'] = 100.0 * np.exp(-distance_km / 5.0)
 
-            # === 3. EMISSION MATCH SCORE (0-100) ===
-            # CRITICAL: Factory must produce the detected gas
+            # Emission match score
             factory_emissions = factory.get('emissions', [])
             if detected_gas in factory_emissions:
-                scores['emission'] = 100.0  # Perfect match
+                scores['emission'] = 100.0
                 logger.debug(f"✓ Emission match: {factory['name']} produces {detected_gas}")
             else:
-                scores['emission'] = 0.0  # No credit if doesn't emit detected gas
+                scores['emission'] = 0.0
                 logger.debug(f"✗ No emission match: {factory['name']} doesn't produce {detected_gas}")
 
-            # === COMPOSITE SCORE CALCULATION ===
-            # Weighted average of all factors
-            weights = {
-                'wind': 0.40,      # 40% - Wind direction is most important
-                'distance': 0.30,   # 30% - Proximity matters
-                'emission': 0.20,   # 20% - Must produce gas (binary multiplier)
-            }
-
-            # Calculate base composite score
+            # Composite score (weighted average)
+            weights = {'wind': 0.40, 'distance': 0.30, 'emission': 0.20}
             composite_score = sum(scores[k] * weights[k] for k in ['wind', 'distance', 'emission'])
 
-            # Apply emission match as binary filter (if emission=0, drastically reduce confidence)
             if scores['emission'] == 0:
-                composite_score *= 0.1  # Reduce to 10% if doesn't emit gas
+                composite_score *= 0.1
 
-            # === 4. WIND CONFIDENCE ADJUSTMENT (10% factor) ===
-            # Adjust final confidence based on wind data quality
-            # High wind confidence (>70%) = full credit
-            # Medium confidence (40-70%) = 0.8x multiplier
-            # Low confidence (<40%) = 0.5x multiplier
+            # Wind data quality adjustment
             if wind_confidence >= 70:
                 confidence_multiplier = 1.0
             elif wind_confidence >= 40:
@@ -330,7 +286,6 @@ class PollutionAnalyzer:
 
             final_confidence = composite_score * confidence_multiplier
 
-            # Store all scoring details
             factory['scores'] = scores
             factory['composite_score'] = composite_score
             factory['confidence'] = float(max(0.0, min(100.0, final_confidence)))
@@ -383,7 +338,11 @@ class PollutionAnalyzer:
     
     def ai_analysis(self, violation_data: Dict, map_image_path: Optional[str] = None) -> str:
         """
-        Use Google Gemini to analyze pollution violation and determine likely source
+        Use Google Gemini to analyze pollution violation and determine likely source.
+
+        Uses hybrid approach:
+        - Simple cases (1 obvious upwind factory): Fast rule-based analysis
+        - Complex cases (multiple upwind, low confidence, unusual patterns): Full AI reasoning
 
         Args:
             violation_data: Complete violation data including gas, factories, wind
@@ -392,129 +351,102 @@ class PollutionAnalyzer:
         Returns:
             AI-generated analysis text
         """
-        # CRITICAL PRE-CHECK: Filter factories before AI analysis
         factories = violation_data.get('nearby_factories', [])
-        MIN_CONFIDENCE_THRESHOLD = 40.0
 
-        # Check if ANY factories meet minimum criteria
-        has_upwind = any(f.get('likely_upwind', False) for f in factories)
-        has_confident = any(f.get('confidence', 0) >= MIN_CONFIDENCE_THRESHOLD for f in factories)
-
-        # If NO factories are upwind AND all have low confidence, skip AI and report uncertainty
-        if factories and not has_upwind and not has_confident:
-            logger.warning("No clear source: All factories have confidence < 40% and none are upwind")
-            return self._rule_based_analysis(violation_data)  # This will now report "No Clear Source"
-
-        if not self.model:  # CHANGED: Check for model instead of client
+        if not self.model:
             return self._rule_based_analysis(violation_data)
 
+        upwind_factories = [f for f in factories if f.get('likely_upwind', False) and
+                           violation_data['gas'] in f.get('emissions', [])]
+
+        # Simple case: Use fast rule-based analysis
+        if len(upwind_factories) == 1 and upwind_factories[0].get('confidence', 0) > 70:
+            logger.info("Simple case detected: Using rule-based analysis")
+            return self._rule_based_analysis(violation_data)
+
+        # Complex case: Let Gemini do real analysis
+        if not upwind_factories or all(f.get('confidence', 0) < 40 for f in upwind_factories):
+            logger.info("No clear source detected: Using AI for uncertainty analysis")
+        elif len(upwind_factories) >= 3:
+            logger.info("Cluster pollution detected: Using AI for multi-source analysis")
+        else:
+            logger.info("Complex case: Using AI for detailed attribution")
+
         try:
-            # Get current language for response
             current_lang = get_current_language()
-            if current_lang == 'ar':
-                language_instruction = "IMPORTANT: You MUST respond ENTIRELY in Arabic (العربية). All text, analysis, recommendations, and conclusions must be written in Arabic. Use formal Arabic suitable for official environmental reports."
-            else:
-                language_instruction = "Respond in English."
+            lang_instruction = ("Respond in formal Arabic (العربية) suitable for environmental reports."
+                              if current_lang == 'ar' else "Respond in English.")
 
-            # Prepare context for Gemini - SAME PROMPT, DIFFERENT API
-            prompt = f"""You are an environmental monitoring AI expert analyzing satellite pollution data.
+            # Build factory data as raw JSON for Gemini to analyze
+            factory_data = []
+            for factory in violation_data.get('nearby_factories', [])[:8]:
+                factory_data.append({
+                    'name': factory['name'],
+                    'type': factory['type'],
+                    'distance_km': round(factory['distance_km'], 1),
+                    'bearing_deg': round(factory.get('bearing_to_hotspot', 0)),
+                    'emissions': factory['emissions'],
+                    'produces_detected_gas': violation_data['gas'] in factory['emissions']
+                })
 
-**Violation Details:**
-- Gas: {violation_data['gas']} ({violation_data['gas_name']})
-- Measured Value: {violation_data['max_value']:.2f} {violation_data['unit']}
-- Threshold: {violation_data['threshold']:.2f} {violation_data['unit']}
-- Exceeded by: {violation_data['percentage_over']:.1f}%
+            # Construct analysis prompt focusing on reasoning
+            prompt = f"""You are an expert environmental scientist analyzing industrial air pollution.
+
+**POLLUTION EVENT:**
+- Detected: {violation_data['gas_name']} ({violation_data['gas']})
+- Concentration: {violation_data['max_value']:.2f} {violation_data['unit']} (threshold: {violation_data['threshold']:.2f})
+- Exceedance: {violation_data['percentage_over']:.1f}% above threshold
 - Severity: {violation_data['severity']}
-- Location: {violation_data['city']} at ({violation_data['hotspot']['lat']:.4f}, {violation_data['hotspot']['lon']:.4f})
+- Location: {violation_data['city']} ({violation_data['hotspot']['lat']:.4f}, {violation_data['hotspot']['lon']:.4f})
 - Time: {violation_data['timestamp_ksa']}
 
-**Wind Conditions:**
-- Direction: {violation_data['wind']['direction_deg']:.0f}° ({violation_data['wind']['direction_cardinal']})
-- Speed: {violation_data['wind']['speed_ms']:.1f} m/s
-- Wind Data Quality: {violation_data['wind'].get('confidence', 0):.0f}% confidence ({violation_data['wind'].get('source_label', 'unknown source')})
-- Wind measurement time: {violation_data['wind'].get('timestamp_ksa', 'N/A')}
-- Satellite observation time: {violation_data['timestamp_ksa']}
-- Time offset: {violation_data['wind'].get('time_offset_hours', 'N/A'):.1f} hours
+**METEOROLOGICAL CONDITIONS:**
+- Wind from: {violation_data['wind']['direction_deg']:.0f}° ({violation_data['wind']['direction_cardinal']})
+- Wind speed: {violation_data['wind']['speed_ms']:.1f} m/s
+- Data quality: {violation_data['wind'].get('confidence', 0):.0f}% ({violation_data['wind'].get('source_label', 'unknown')})
+- Wind measured: {violation_data['wind'].get('timestamp_ksa', 'N/A')}
+- Time offset from satellite: {violation_data['wind'].get('time_offset_hours', 'N/A'):.1f}h
 
-**Nearby Factories:**
-"""
-            
-            for i, factory in enumerate(violation_data.get('nearby_factories', [])[:5], 1):
-                # Calculate if this factory is aligned with wind
-                bearing = factory.get('bearing_to_hotspot', 0)
-                wind_dir = violation_data['wind']['direction_deg']
-                # FIXED: Use reverse bearing for upwind calculation (same as line 209)
-                reverse_bearing = (bearing + 180) % 360
-                angle_diff = abs((reverse_bearing - wind_dir + 180) % 360 - 180)
+**INDUSTRIAL FACILITIES:**
+{json.dumps(factory_data, indent=2)}
 
-                prompt += f"""
-{i}. {factory['name']}
-   - Type: {factory['type']}
-   - Distance: {factory['distance_km']:.1f} km
-   - Bearing to hotspot: {bearing:.0f}° (Factory is {self._get_direction_relative_to_hotspot(bearing)} of hotspot)
-   - Produces: {', '.join(factory['emissions'])}
-   - Emission match: {'✓ YES - produces {}'.format(violation_data['gas']) if violation_data['gas'] in factory['emissions'] else '✗ NO - does not produce {}'.format(violation_data['gas'])}
-   - Upwind status: {'✓ UPWIND (wind blows from factory to hotspot)' if factory.get('likely_upwind', False) else '✗ NOT UPWIND (wind angle mismatch)'}
-   - Wind alignment: {angle_diff:.0f}° deviation from ideal
-   - Confidence: {factory['confidence']:.0f}%
-"""
-            
-            prompt += """
-**Task:**
-Analyze this data and identify the pollution source. Your analysis MUST include:
+**YOUR ANALYSIS TASKS:**
 
-**CRITICAL FIRST CHECK:**
-Before attributing to any factory, verify:
-- Are ANY factories marked as "✓ UPWIND" in the data above?
-- Are ANY factories showing confidence >40%?
-- If NO factories are upwind AND all confidence scores are <40%, you MUST report: **"NO CLEAR SOURCE IDENTIFIED - No factories aligned with wind direction"**
+1. **Source Attribution:**
+   Using atmospheric dispersion principles, determine which facility (if any) is most likely responsible.
+   Consider:
+   - Wind direction (pollutant transport from source to hotspot)
+   - Distance and plume dispersion
+   - Emission profile matching
+   - Wind speed effects on concentration
 
-**CLUSTER POLLUTION CHECK:**
-Count how many factories are marked "✓ UPWIND":
-- If 3 OR MORE factories are upwind within 10 km, this suggests **CLUSTER POLLUTION** (cumulative emissions from industrial zone)
-- In this case, recommend **COORDINATED CLUSTER INVESTIGATION** of the entire industrial area, not just one facility
-- Report the top 3 contributors and note this is likely combined emissions
+2. **Reasoning:**
+   Explain your analytical process. Why did you select (or exclude) each facility?
+   What atmospheric factors influenced your decision?
 
-**If a clear single source exists (1-2 upwind factories with >40% confidence):**
+3. **Uncertainty Assessment:**
+   - What's your confidence level (High/Medium/Low)? Why?
+   - What data limitations affect your analysis?
+   - Is wind data quality adequate for attribution?
 
-1. **Primary Source Identification:**
-   - Name the most likely factory
-   - JUSTIFY your selection by explaining:
-     a) EMISSION MATCH: Does this factory produce the detected gas? (CRITICAL: Only select factories that emit this specific gas)
-     b) WIND DIRECTION: Is this factory UPWIND of the hotspot? (Wind should blow FROM factory TO hotspot)
-     c) DISTANCE: How close is the factory to the pollution hotspot?
+4. **Data Quality Concerns:**
+   - Are there red flags in wind timing, confidence, or measurement quality?
+   - Could temporal offset between wind and satellite data affect attribution?
 
-2. **Exclusion Reasoning:**
-   - Briefly explain why nearby factories were excluded (e.g., "Factory X excluded: wrong emissions" or "Factory Y excluded: downwind location")
+5. **Recommendation:**
+   - Single source: Recommend inspection of specific facility
+   - Multiple contributors (3+ upwind): Recommend cluster investigation
+   - Unclear: Recommend expanding monitoring or investigating alternative sources
 
-3. **Confidence Assessment:**
-   - Rate confidence as High (>70%), Medium (40-70%), or Low (<40%)
-   - Consider: wind data quality, emission profile match, distance, upwind position
+**OUTPUT FORMAT:**
+MOST LIKELY SOURCE: [Name or "No clear source"]
+CONFIDENCE: [High/Medium/Low] ([%])
+REASONING: [Your atmospheric analysis]
+CONCERNS: [Data quality issues or limitations]
+RECOMMENDATION: [Specific action]
 
-4. **Recommended Actions:**
-   - For single source: "Immediate inspection of [factory name]"
-   - For cluster (3+ upwind): "COORDINATED CLUSTER INVESTIGATION of [area] industrial zone - inspect [top 3 facilities]"
-
-5. **Alternative Sources** (if applicable)
-
-**If NO clear source (no upwind factories OR all confidence <40%):**
-Report: "⚠️ **NO CLEAR SOURCE IDENTIFIED**"
-Explain:
-- No factories are aligned with wind direction
-- List possible explanations: mobile sources, distant sources, wind uncertainty, source outside monitoring area
-- Recommend: Expand monitoring radius, investigate mobile/distant sources
-
-CRITICAL RULES:
-- ONLY select factories that produce the detected gas type
-- ONLY attribute if confidence ≥40% OR factory is upwind
-- If wind points to empty space (no factories), report "No clear source"
-- LOW wind confidence (<50%) reduces overall attribution certainty
-- ALWAYS explain your reasoning with emission matching + wind direction logic
-
-Keep response concise (max 300 words), professional, and actionable.
-
-**LANGUAGE INSTRUCTION:**
-{language_instruction}"""
+{lang_instruction}
+Keep analysis under 300 words, professional tone."""
 
             # Prepare content for AI (text + optional image)
             content_parts = []
@@ -538,31 +470,24 @@ Keep response concise (max 300 words), professional, and actionable.
 
                     image_included = True
 
-                    # Add vision-specific instructions to prompt
+                    # Add vision-specific instructions
                     prompt += """
 
-**VISUAL MAP ANALYSIS:**
-You are analyzing a pollution map image showing:
-- RED/ORANGE HOTSPOT MARKER: Exact location of maximum pollution concentration
-- BLUE ARROW: Wind direction (arrow points in direction wind is blowing TO)
-- RED FACTORY MARKERS: HIGH PRIORITY - Upwind factories that emit the detected gas
-- BLUE FACTORY MARKERS: Lower priority - Other nearby factories
-- HEATMAP COLORS (Google Maps AQI Standard):
-  * GREEN = Good air quality (low concentration)
-  * YELLOW = Moderate pollution
-  * ORANGE = Unhealthy for sensitive groups
-  * RED = Unhealthy (high concentration)
-  * PURPLE = Very unhealthy
-  * MAROON = Hazardous (extreme concentration)
+**VISUAL ANALYSIS (Map Image Provided):**
+The map shows:
+- Pollution heatmap (green=low, yellow/orange=moderate, red/purple=high)
+- Hotspot marker (pollution maximum)
+- Blue arrow (wind direction)
+- Factory markers (red=high priority, blue=other)
 
-CRITICAL VISION TASKS:
-1. **Spatial Analysis**: Visually verify which factories are upwind of the hotspot by following the blue wind arrow backwards
-2. **Pollution Pattern**: Describe the visual shape/spread of the pollution heatmap - is it a tight plume pointing to a source or dispersed?
-3. **Distance Assessment**: Visually assess proximity of red markers to the hotspot
-4. **Wind Alignment**: Confirm if any red factory markers align with the wind arrow direction relative to the hotspot
-5. **Confidence Check**: Does the visual evidence support the data analysis or raise concerns?
+**ADDITIONAL VISION TASKS:**
+1. Plume morphology: Does the pollution pattern suggest a point source or diffuse/area source?
+2. Directional gradient: Does pollution intensity decrease in a direction that points to a specific facility?
+3. Visual wind verification: Does the plume shape align with stated wind direction?
+4. Spatial anomalies: Any unexpected patterns (e.g., pollution hotspot far from all facilities)?
+5. Confidence verification: Does visual evidence support or contradict numerical attribution?
 
-Use the visual map to provide insights beyond the numerical data."""
+Integrate visual insights into your reasoning section."""
 
                     logger.info(f"✅ Map image added to {'Vertex AI' if self.use_vertex else 'Gemini'} vision analysis - Gemini 3 will perform spatial analysis")
                 except Exception as img_err:
@@ -580,35 +505,25 @@ Use the visual map to provide insights beyond the numerical data."""
             else:
                 content_parts.append(prompt)
 
-            # Generate AI analysis
-            logger.info(f"Sending request to Gemini 3 Pro ({'Vertex AI' if self.use_vertex else 'Standard API'}) - Vision: {image_included}, High-Res: True")
+            logger.info(f"Sending to Gemini 3 Pro ({'Vertex AI' if self.use_vertex else 'API'}) - Vision: {image_included}")
 
-            if self.use_vertex:
-                response = self.model.generate_content(
-                    content_parts,
-                    generation_config={
-                        'temperature': 0.3,
-                        'max_output_tokens': 800,  # More tokens for vision analysis
-                        'top_p': 0.95,
-                        'media_resolution': 'high',  # High resolution for detailed spatial analysis
-                    }
-                )
-            else:
-                response = self.model.generate_content(
-                    content_parts,
-                    generation_config={
-                        'temperature': 0.3,
-                        'max_output_tokens': 800,
-                        'media_resolution': 'high',  # High resolution for detailed spatial analysis
-                    }
-                )
-
-            analysis = response.text  # NEW: Access text directly
-
+            config_params = {
+                'temperature': 0.5,
+                'max_output_tokens': 900,
+                'top_p': 0.95
+            }
             if image_included:
-                logger.info("✅ Gemini 3 Pro VISION analysis completed successfully - AI analyzed pollution map visually")
-            else:
-                logger.info("✅ Gemini 3 Pro TEXT-ONLY analysis completed successfully")
+                config_params['media_resolution'] = 'high'
+
+            response = self.model.generate_content(
+                content_parts,
+                generation_config=config_params
+            )
+
+            analysis = response.text
+
+            mode = "vision + reasoning" if image_included else "reasoning"
+            logger.info(f"✅ Gemini analysis complete ({mode})")
 
             return analysis
             
@@ -627,17 +542,13 @@ Use the visual map to provide insights beyond the numerical data."""
                 return "لم يتم العثور على مصانع بالقرب من بؤرة التلوث. قد يكون المصدر خارج المنطقة المراقبة أو مصدر متنقل."
             return "No factories found near pollution hotspot. Source may be outside monitored area or mobile source."
 
-        # Find upwind factories that produce this gas
         gas = violation_data['gas']
         gas_name = violation_data.get('gas_name', gas)
         wind_dir = violation_data.get('wind', {}).get('direction_cardinal', 'Unknown')
         wind_deg = violation_data.get('wind', {}).get('direction_deg', 0)
 
-        # Priority 1: Upwind + produces gas
         upwind_emitters = [f for f in factories if gas in f['emissions'] and f.get('likely_upwind', False)]
-        # Priority 2: Just produces gas (if no upwind match)
         all_emitters = [f for f in factories if gas in f['emissions']]
-        # Non-emitters for exclusion reasoning
         non_emitters = [f for f in factories[:5] if gas not in f['emissions']]
 
         candidates = upwind_emitters if upwind_emitters else all_emitters
@@ -645,17 +556,12 @@ Use the visual map to provide insights beyond the numerical data."""
         wind_confidence = violation_data.get('wind', {}).get('confidence', 0)
         wind_source = violation_data.get('wind', {}).get('source_label', 'unknown')
 
-        # CRITICAL FIX: Check if attribution is reliable
-        # If no factories are upwind AND top confidence is low, report "No Clear Source"
         if candidates:
             top = candidates[0]
             top_confidence = top.get('confidence', 0)
             top_is_upwind = top.get('likely_upwind', False)
+            MIN_CONFIDENCE_THRESHOLD = 40.0
 
-            # Minimum confidence threshold for attribution
-            MIN_CONFIDENCE_THRESHOLD = 40.0  # Only attribute if confidence >= 40%
-
-            # If top factory is NOT upwind AND has low confidence, report uncertainty
             if not top_is_upwind and top_confidence < MIN_CONFIDENCE_THRESHOLD:
                 if is_ar:
                     analysis = f"⚠️ لم يتم تحديد مصدر واضح\n"
